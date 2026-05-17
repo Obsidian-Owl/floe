@@ -250,9 +250,14 @@ def test_platform_runtime_modules_are_explicitly_marked_platform_blackbox() -> N
     platform_deployment = (
         REPO_ROOT / "tests" / "e2e" / "test_platform_deployment_e2e.py"
     ).read_text()
+    customer360_observability = (
+        REPO_ROOT / "tests" / "e2e" / "test_customer360_observability_gate.py"
+    ).read_text()
 
     assert "pytest.mark.platform_blackbox" in platform_bootstrap
     assert "pytest.mark.platform_blackbox" in platform_deployment
+    assert "pytest.mark.platform_blackbox" in customer360_observability
+    assert "pytest.mark.developer_workflow" not in customer360_observability
 
 
 @pytest.mark.requirement("LIVE-VALIDATION")

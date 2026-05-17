@@ -27,7 +27,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import structlog
-from opentelemetry import metrics, trace
+from opentelemetry import _logs, metrics, trace
+from opentelemetry.sdk._logs import LoggerProvider as SdkLoggerProvider
+from opentelemetry.sdk._logs import LoggingHandler
 from opentelemetry.sdk.metrics import MeterProvider as SdkMeterProvider
 from opentelemetry.sdk.trace import TracerProvider
 
@@ -48,6 +50,11 @@ def _reset_otel_state() -> Generator[None, None, None]:
     """
     from opentelemetry.sdk.trace import TracerProvider as SdkTracerProvider
 
+    for handler in list(logging.getLogger().handlers):
+        if isinstance(handler, LoggingHandler):
+            logging.getLogger().removeHandler(handler)
+            handler.close()
+
     # Reset TracerProvider before test
     trace._TRACER_PROVIDER_SET_ONCE._done = False
     # None, not ProxyTracerProvider() — avoids recursion in get_tracer()
@@ -62,6 +69,15 @@ def _reset_otel_state() -> Generator[None, None, None]:
         # Restore proxy so meters auto-upgrade
         if hasattr(metrics._internal, "_PROXY_METER_PROVIDER"):
             metrics._internal._PROXY_METER_PROVIDER = metrics._internal._ProxyMeterProvider()
+
+    # Reset LoggerProvider before test
+    if hasattr(_logs, "_internal"):
+        if hasattr(_logs._internal, "_LOGGER_PROVIDER_SET_ONCE"):
+            _logs._internal._LOGGER_PROVIDER_SET_ONCE._done = False
+        if hasattr(_logs._internal, "_LOGGER_PROVIDER"):
+            _logs._internal._LOGGER_PROVIDER = None
+        if hasattr(_logs._internal, "_PROXY_LOGGER_PROVIDER"):
+            _logs._internal._PROXY_LOGGER_PROVIDER = _logs._internal.ProxyLoggerProvider()
 
     from floe_core.telemetry.tracer_factory import reset_tracer
 
@@ -82,6 +98,20 @@ def _reset_otel_state() -> Generator[None, None, None]:
         if hasattr(metrics._internal, "_PROXY_METER_PROVIDER"):
             metrics._internal._PROXY_METER_PROVIDER = metrics._internal._ProxyMeterProvider()
 
+    # Reset LoggerProvider after test
+    if hasattr(_logs, "_internal"):
+        if hasattr(_logs._internal, "_LOGGER_PROVIDER_SET_ONCE"):
+            _logs._internal._LOGGER_PROVIDER_SET_ONCE._done = False
+        if hasattr(_logs._internal, "_LOGGER_PROVIDER"):
+            _logs._internal._LOGGER_PROVIDER = None
+        if hasattr(_logs._internal, "_PROXY_LOGGER_PROVIDER"):
+            _logs._internal._PROXY_LOGGER_PROVIDER = _logs._internal.ProxyLoggerProvider()
+
+    for handler in list(logging.getLogger().handlers):
+        if isinstance(handler, LoggingHandler):
+            logging.getLogger().removeHandler(handler)
+            handler.close()
+
     reset_tracer()
 
     # Reset the initialization module's internal state if it exists
@@ -92,6 +122,10 @@ def _reset_otel_state() -> Generator[None, None, None]:
             init_mod._initialized = False
         if hasattr(init_mod, "_meter_provider"):
             init_mod._meter_provider = None
+        if hasattr(init_mod, "_logger_provider"):
+            init_mod._logger_provider = None
+        if hasattr(init_mod, "_otel_logging_handler"):
+            init_mod._otel_logging_handler = None
         if hasattr(init_mod, "_logging_configured"):
             init_mod._logging_configured = False
     except (ImportError, AttributeError):
@@ -692,6 +726,23 @@ class TestEndpointEdgeCases:
         )
 
     @pytest.mark.requirement("001-FR-040")
+    def test_http_endpoint_without_host_does_not_initialize(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """HTTP(S) endpoints without a host are invalid OTLP collector targets."""
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://")
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        ensure_telemetry_initialized()
+
+        provider = trace.get_tracer_provider()
+        assert not isinstance(provider, TracerProvider), (
+            "http:// without a host should not initialize SDK TracerProvider."
+        )
+
+    @pytest.mark.requirement("001-FR-040")
     def test_https_endpoint(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -948,6 +999,143 @@ class TestMeterProviderInitialization:
                 "times. ensure_telemetry_initialized() must be idempotent — "
                 "only set MeterProvider once."
             )
+
+
+class TestLoggerProviderInitialization:
+    """Test that OTLP initialization exports structured logs as a first-class signal."""
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_logger_provider_created_with_endpoint(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An OTLP endpoint must configure the SDK LoggerProvider for Loki export."""
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4317")
+        monkeypatch.setenv("OTEL_SERVICE_NAME", "test-svc")
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        ensure_telemetry_initialized()
+
+        logger_provider = _logs.get_logger_provider()
+        assert isinstance(logger_provider, SdkLoggerProvider), (
+            f"Expected SDK LoggerProvider but got {type(logger_provider).__name__}. "
+            "ensure_telemetry_initialized() must configure logs alongside traces "
+            "and metrics when OTLP is enabled."
+        )
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_root_logger_has_otel_logging_handler_with_endpoint(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Structlog/stdlib records must be bridged into the OTel logs pipeline."""
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4317")
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        ensure_telemetry_initialized()
+
+        handlers = logging.getLogger().handlers
+        assert any(isinstance(handler, LoggingHandler) for handler in handlers), (
+            "Expected root logger to include an OpenTelemetry LoggingHandler so "
+            "Floe structured logs are exported to the collector/Loki pipeline."
+        )
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_logger_provider_not_created_without_endpoint(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Without an OTLP endpoint, logging remains local/stdout only."""
+        monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        ensure_telemetry_initialized()
+
+        logger_provider = _logs.get_logger_provider()
+        assert not isinstance(logger_provider, SdkLoggerProvider), (
+            "Expected default proxy logger provider when OTLP endpoint is absent."
+        )
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_reset_telemetry_removes_otel_logging_handler(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """reset_telemetry must not leak OTel logging handlers across tests."""
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4317")
+
+        from floe_core.telemetry.initialization import (
+            ensure_telemetry_initialized,
+            reset_telemetry,
+        )
+
+        ensure_telemetry_initialized()
+        reset_telemetry()
+
+        assert not any(
+            isinstance(handler, LoggingHandler) for handler in logging.getLogger().handlers
+        )
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_force_flush_telemetry_flushes_traces_metrics_and_logs(self) -> None:
+        """Runtime finalizers must drain all OTel signals, including logs."""
+        trace_provider = MagicMock()
+        meter_provider = MagicMock()
+        logger_provider = MagicMock()
+
+        from floe_core.telemetry.initialization import force_flush_telemetry
+
+        with (
+            patch(
+                "floe_core.telemetry.initialization.trace.get_tracer_provider",
+                return_value=trace_provider,
+            ),
+            patch(
+                "floe_core.telemetry.initialization.metrics.get_meter_provider",
+                return_value=meter_provider,
+            ),
+            patch(
+                "floe_core.telemetry.initialization._logs.get_logger_provider",
+                return_value=logger_provider,
+            ),
+        ):
+            force_flush_telemetry(timeout_millis=7000)
+
+        trace_provider.force_flush.assert_called_once_with(timeout_millis=7000)
+        meter_provider.force_flush.assert_called_once_with(timeout_millis=7000)
+        logger_provider.force_flush.assert_called_once_with(timeout_millis=7000)
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_force_flush_telemetry_logs_provider_failures(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Flush failures remain best-effort but leave debug evidence."""
+        import floe_core.telemetry.initialization as init_mod
+        from floe_core.telemetry.initialization import force_flush_telemetry
+
+        failing_provider = MagicMock()
+        failing_provider.force_flush.side_effect = RuntimeError("collector unavailable")
+        healthy_provider = MagicMock()
+        logger = MagicMock()
+
+        monkeypatch.setattr(init_mod.trace, "get_tracer_provider", lambda: failing_provider)
+        monkeypatch.setattr(init_mod.metrics, "get_meter_provider", lambda: healthy_provider)
+        monkeypatch.setattr(init_mod._logs, "get_logger_provider", lambda: healthy_provider)
+        monkeypatch.setattr(init_mod, "logger", logger, raising=False)
+
+        force_flush_telemetry(timeout_millis=7000)
+
+        failing_provider.force_flush.assert_called_once_with(timeout_millis=7000)
+        assert healthy_provider.force_flush.call_count == 2
+        logger.debug.assert_called_once_with(
+            "telemetry_flush_provider_failed",
+            provider=type(failing_provider).__name__,
+            exc_info=True,
+        )
 
 
 class TestLoggingDecoupling:

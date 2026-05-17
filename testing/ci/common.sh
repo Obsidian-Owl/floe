@@ -29,6 +29,9 @@
 # Leave the branch unset by default so setup-cluster.sh can auto-detect the
 # current checkout while still allowing explicit overrides from the environment.
 : "${FLOE_FLUX_GIT_BRANCH:=}"
+# Optional exact Git commit for Flux to deploy. Remote SHA-pinned validation
+# uses this so Flux and the test runner execute one source revision.
+: "${FLOE_FLUX_GIT_COMMIT:=}"
 # Remote repo root inside the DevPod workspace. Defaults to the devcontainer
 # workspaceFolder, but stays overrideable for non-standard layouts.
 : "${DEVPOD_REMOTE_WORKDIR:=/workspace}"
@@ -49,7 +52,7 @@ fi
 : "${FLOE_DEMO_IMAGE:=${FLOE_DEMO_IMAGE_REPOSITORY}:${FLOE_DEMO_IMAGE_TAG}}"
 
 export FLOE_RELEASE_NAME FLOE_NAMESPACE FLOE_KIND_CLUSTER FLOE_CHART_DIR FLOE_VALUES_FILE
-export FLOE_FLUX_FIXTURE_DIR FLOE_FLUX_GIT_URL FLOE_FLUX_GIT_BRANCH DEVPOD_REMOTE_WORKDIR
+export FLOE_FLUX_FIXTURE_DIR FLOE_FLUX_GIT_URL FLOE_FLUX_GIT_BRANCH FLOE_FLUX_GIT_COMMIT DEVPOD_REMOTE_WORKDIR
 export FLOE_MANIFEST_PATH FLOE_DEMO_IMAGE_REPOSITORY FLOE_DEMO_IMAGE_TAG FLOE_DEMO_IMAGE
 export FLUX_VERSION
 

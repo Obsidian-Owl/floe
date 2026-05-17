@@ -400,6 +400,39 @@ class TestCreateIngestionAssets:
             create_ingestion_assets(mock_ref, project_dir=tmp_path)
 
     @pytest.mark.requirement("4F-FR-060")
+    def test_factory_bounds_long_normalized_source_names(self, tmp_path: Path) -> None:
+        """Long source names must produce deterministic bounded Dagster asset names."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        long_prefix = "source-" + ("very-long-" * 20)
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "sources": [
+                {
+                    "name": f"{long_prefix}-a",
+                    "source_type": "rest_api",
+                    "source_config": {"source": SourceLike()},
+                    "destination_table": "bronze.long_a",
+                },
+                {
+                    "name": f"{long_prefix}-b",
+                    "source_type": "rest_api",
+                    "source_config": {"source": SourceLike()},
+                    "destination_table": "bronze.long_b",
+                },
+            ],
+        }
+
+        assets = create_ingestion_assets(mock_ref, project_dir=tmp_path)
+
+        asset_names = {asset_def.key.path[-1] for asset_def in assets}
+        assert len(asset_names) == 2
+        assert all(len(name) <= 128 for name in asset_names)
+        assert all(name.startswith("run_ingestion_source_very_long") for name in asset_names)
+
+    @pytest.mark.requirement("4F-FR-060")
     def test_factory_asset_runs_ingestion_pipeline(self, tmp_path: Path) -> None:
         """Materializing the asset must create and run the ingestion pipeline."""
         from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets

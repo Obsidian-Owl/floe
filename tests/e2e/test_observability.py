@@ -931,27 +931,28 @@ class TestObservability(IntegrationTestBase):
             "using the same run_id for correlation."
         )
 
-        # Now verify actual correlation: get a trace_id from Jaeger
-        # and check Marquez has a lineage event with matching run_id/trace_id
-        jaeger_trace_id: str | None = None
+        # Now verify actual correlation: collect trace_ids from Jaeger and
+        # check Marquez has a lineage event with a matching trace_id. Jaeger
+        # ordering is backend-dependent, so the first trace is not meaningful.
+        jaeger_trace_ids: set[str] = set()
         for service in floe_services:
             traces_response = jaeger_client.get(
                 "/api/traces",
-                params={"service": service, "limit": 5},
+                params={"service": service, "limit": 50},
             )
             if traces_response.status_code == 200:
                 traces = traces_response.json().get("data", [])
-                if traces:
-                    jaeger_trace_id = traces[0].get("traceID")
-                    break
+                jaeger_trace_ids.update(
+                    str(trace_id) for trace in traces if (trace_id := trace.get("traceID"))
+                )
 
-        assert jaeger_trace_id is not None, (
+        assert jaeger_trace_ids, (
             "CORRELATION GAP: Floe services exist in Jaeger but no traces found.\n"
             f"Services checked: {floe_services}"
         )
 
-        # Query Marquez for lineage events that reference this trace_id
-        correlation_found = False
+        # Query Marquez for lineage events that reference any Jaeger trace_id.
+        marquez_trace_ids: set[str] = set()
         for ns_name in floe_namespaces:
             jobs_response = marquez_client.get(f"/api/v1/namespaces/{ns_name}/jobs")
             if jobs_response.status_code != 200:
@@ -965,22 +966,18 @@ class TestObservability(IntegrationTestBase):
                     continue
                 runs = runs_response.json().get("runs", [])
                 for run in runs:
-                    # Check if run_id or facets contain the trace_id
-                    run_id = run.get("id", "")
+                    # Check if run_id or facets contain any trace id.
+                    run_id = str(run.get("id", ""))
                     facets = run.get("facets", {})
-                    # Check for trace_id in parent run facet or custom facets
                     facets_str = json.dumps(facets)
-                    if jaeger_trace_id in run_id or jaeger_trace_id in facets_str:
-                        correlation_found = True
-                        break
-                if correlation_found:
-                    break
-            if correlation_found:
-                break
+                    for trace_id in jaeger_trace_ids:
+                        if trace_id in run_id or trace_id in facets_str:
+                            marquez_trace_ids.add(trace_id)
 
-        assert correlation_found, (
+        assert jaeger_trace_ids & marquez_trace_ids, (
             "CORRELATION GAP: trace_id from Jaeger not found in Marquez lineage events.\n"
-            f"Jaeger trace_id: {jaeger_trace_id}\n"
+            f"Jaeger trace_ids: {sorted(jaeger_trace_ids)}\n"
+            f"Marquez-correlated trace_ids: {sorted(marquez_trace_ids)}\n"
             f"Namespaces searched: {floe_namespaces}\n"
             "Fix: Pipeline must propagate OTel trace_id into OpenLineage run facets "
             "so that traces and lineage events can be correlated."
@@ -1437,10 +1434,16 @@ class TestObservability(IntegrationTestBase):
             "add floe.product_name, floe.stage attributes to spans."
         )
 
+        traces_with_spans = [
+            trace
+            for trace in traces
+            if isinstance(trace, dict) and isinstance(trace.get("spans"), list)
+        ]
+        assert traces_with_spans, "Jaeger response contained no traces with spans"
+
         # Validate trace structure
-        first_trace = traces[0]
+        first_trace = traces_with_spans[0]
         assert "traceID" in first_trace, "Trace missing traceID field"
-        assert "spans" in first_trace, "Trace missing spans field"
         assert len(first_trace["spans"]) > 0, "Trace has no spans"
 
         first_span = first_trace["spans"][0]
@@ -1461,13 +1464,15 @@ class TestObservability(IntegrationTestBase):
             assert "key" in tag, "Tag missing 'key' field"
             assert "value" in tag or "vStr" in tag or "vLong" in tag, "Tag missing value field"
 
-        # Check for domain-specific attributes across all spans in the trace
+        # Check for domain-specific attributes across all returned spans. Jaeger
+        # does not guarantee the first trace is the richest Customer 360 trace.
         # TODO(#144): When attribute naming migrates to floe.{domain}.* convention,
         # update these prefixes to floe.compile.*, floe.governance.*, floe.enforcement.*
         all_tag_keys: set[str] = set()
-        for span in first_trace["spans"]:
-            for tag in span.get("tags", []):
-                all_tag_keys.add(tag.get("key", ""))
+        for trace_record in traces_with_spans:
+            for span in trace_record["spans"]:
+                for tag in span.get("tags", []):
+                    all_tag_keys.add(tag.get("key", ""))
 
         # Production uses domain-specific prefixes, not just floe.*
         domain_attributes = [

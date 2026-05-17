@@ -12,7 +12,9 @@ import httpx
 import pytest
 
 from testing.ci.customer360_observability import (
+    Customer360ObservabilityConfig,
     EvidenceRecord,
+    EvidenceResult,
     EvidenceStatus,
     ObservabilityContext,
     classify_evidence_records,
@@ -20,6 +22,7 @@ from testing.ci.customer360_observability import (
     query_marquez_lineage,
     query_prometheus_metrics,
     query_trace_backend,
+    validate_customer360_observability,
 )
 
 e2e_conftest = cast(Any, importlib.import_module("tests.e2e.conftest"))
@@ -129,6 +132,21 @@ def _is_url_payload_map(
     return all(isinstance(value, (dict, _FakeResponse)) for value in payload.values())
 
 
+def _pass_result(backend: str, payload: Mapping[str, Any]) -> EvidenceResult:
+    return EvidenceResult(
+        backend=backend,
+        status=EvidenceStatus.PASS,
+        query=backend,
+        message=f"{backend} pass",
+        records=(
+            EvidenceRecord(
+                payload=payload,
+                timestamp_epoch_seconds=1_699_999_950.0,
+            ),
+        ),
+    )
+
+
 def test_customer360_observability_classifies_backend_unreachable() -> None:
     """Transport failures are infrastructure/backend failures, not product failures."""
     result = classify_evidence_records(
@@ -143,6 +161,34 @@ def test_customer360_observability_classifies_backend_unreachable() -> None:
     assert not result.ok
     assert result.backend == "jaeger"
     assert "connection refused" in result.message
+
+
+def test_customer360_observability_config_uses_in_cluster_service_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Live E2E jobs must not fall back to localhost-only demo ports."""
+    for key in (
+        "FLOE_DEMO_DAGSTER_URL",
+        "FLOE_DEMO_JAEGER_URL",
+        "FLOE_DEMO_LOKI_URL",
+        "FLOE_DEMO_PROMETHEUS_URL",
+        "FLOE_DEMO_MARQUEZ_URL",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    monkeypatch.setenv("DAGSTER_URL", "http://floe-platform-dagster-webserver:3000")
+    monkeypatch.setenv("JAEGER_URL", "http://floe-platform-jaeger-query:16686")
+    monkeypatch.setenv("LOKI_HOST", "floe-platform-loki")
+    monkeypatch.setenv("PROMETHEUS_HOST", "floe-platform-prometheus")
+    monkeypatch.setenv("MARQUEZ_HOST", "floe-platform-marquez")
+
+    config = Customer360ObservabilityConfig.from_env()
+
+    assert config.dagster_url == "http://floe-platform-dagster-webserver:3000"
+    assert config.jaeger_url == "http://floe-platform-jaeger-query:16686"
+    assert config.loki_url == "http://floe-platform-loki:3100"
+    assert config.prometheus_url == "http://floe-platform-prometheus:9090"
+    assert config.marquez_url == "http://floe-platform-marquez:5000"
 
 
 def test_customer360_observability_classifies_reachable_backend_with_no_fresh_evidence() -> None:
@@ -283,6 +329,154 @@ def test_customer360_trace_helper_queries_jaeger_by_service_product_and_run() ->
     ]
 
 
+def test_customer360_trace_helper_accepts_run_level_records_across_assets() -> None:
+    """Trace proof should classify all traces for a run, not one table-only trace."""
+    client = _FakeClient(
+        {
+            "data": [
+                {
+                    "traceID": "trace-dbt",
+                    "spans": [
+                        {
+                            "operationName": "floe.orchestrator.dagster.asset.customer-360",
+                            "startTime": 1_699_999_950_000_000,
+                            "tags": [
+                                {"key": "floe.product.name", "value": "customer-360"},
+                                {"key": "floe.run.id", "value": "run-123"},
+                                {"key": "floe.plugin.name", "value": "dagster"},
+                                {"key": "floe.table.name", "value": "mart_customer_360"},
+                            ],
+                        }
+                    ],
+                },
+                {
+                    "traceID": "trace-ingestion",
+                    "spans": [
+                        {
+                            "operationName": (
+                                "floe.orchestrator.dagster.asset.run_ingestion_raw_customers"
+                            ),
+                            "startTime": 1_699_999_951_000_000,
+                            "tags": [
+                                {"key": "floe.product.name", "value": "customer-360"},
+                                {"key": "floe.run.id", "value": "run-123"},
+                                {"key": "floe.stage", "value": "ingestion"},
+                                {"key": "floe.table.name", "value": "bronze.raw_customers"},
+                            ],
+                        }
+                    ],
+                },
+            ]
+        }
+    )
+    context = ObservabilityContext(
+        product="customer-360",
+        run_id="run-123",
+        freshness_window_seconds=300,
+        now_epoch_seconds=1_700_000_000.0,
+    )
+
+    result = query_trace_backend(
+        jaeger_url="http://jaeger",
+        service="customer-360",
+        context=context,
+        client=cast(httpx.Client, client),
+    )
+
+    assert result.status is EvidenceStatus.PASS
+    assert result.evidence_count == 2
+
+
+def test_customer360_validation_polls_until_backends_have_full_runtime_evidence() -> None:
+    """The live gate waits for collector/backend ingestion after Dagster run success."""
+    dagster_result = _pass_result("dagster", {"product": "customer-360", "runId": "run-123"})
+    trace_partial = _pass_result(
+        "traces",
+        {
+            "traceID": "trace-ingestion",
+            "spans": [
+                {
+                    "operationName": "floe.orchestrator.dagster.asset.run_ingestion_raw_customers",
+                    "tags": [
+                        {"key": "floe.product.name", "value": "customer-360"},
+                        {"key": "floe.run.id", "value": "run-123"},
+                        {"key": "floe.stage", "value": "ingestion"},
+                        {"key": "floe.plugin.name", "value": "dlt"},
+                    ],
+                }
+            ],
+        },
+    )
+    trace_complete = _pass_result(
+        "traces",
+        {
+            "traceID": "trace-transform",
+            "spans": [
+                {
+                    "operationName": "floe.customer-360.run",
+                    "tags": [
+                        {"key": "floe.product.name", "value": "customer-360"},
+                        {"key": "floe.run.id", "value": "run-123"},
+                    ],
+                },
+                {"operationName": "floe.orchestrator.dagster.asset.customer-360"},
+                {"operationName": "floe.dbt.customer-360.models mart_customer_360"},
+                {"operationName": "ingestion dlt raw_customers"},
+                {"operationName": "iceberg catalog storage export"},
+            ],
+        },
+    )
+    logs_missing = EvidenceResult(
+        backend="logs",
+        status=EvidenceStatus.NO_FRESH_EVIDENCE,
+        query="logs",
+        message="not indexed yet",
+    )
+    logs_complete = _pass_result(
+        "logs",
+        {"message": '{"product":"customer-360","run_id":"run-123"}'},
+    )
+    metrics_result = _pass_result("metrics", {"metric": {"floe_product_name": "customer-360"}})
+    lineage_result = _pass_result("lineage", {"facets": {"trace_id": "trace-transform"}})
+
+    config = Customer360ObservabilityConfig(
+        run_id="run-123",
+        evidence_poll_timeout_seconds=1,
+        evidence_poll_interval_seconds=0.1,
+    )
+
+    with (
+        patch(
+            "testing.ci.customer360_observability.query_dagster_run",
+            return_value=dagster_result,
+        ),
+        patch(
+            "testing.ci.customer360_observability.query_trace_backend",
+            side_effect=[trace_partial, trace_complete],
+        ) as trace_query,
+        patch(
+            "testing.ci.customer360_observability.query_loki_logs",
+            side_effect=[logs_missing, logs_complete],
+        ),
+        patch(
+            "testing.ci.customer360_observability.query_prometheus_metrics",
+            return_value=metrics_result,
+        ),
+        patch(
+            "testing.ci.customer360_observability.query_marquez_lineage",
+            return_value=lineage_result,
+        ),
+        patch("testing.fixtures.polling.time.sleep") as sleep,
+    ):
+        result = validate_customer360_observability(config)
+
+    assert result.ok
+    assert trace_query.call_count == 2
+    sleep.assert_called_once()
+    assert result.evidence["observability.traces.dbt_model_spans"] == "true"
+    assert result.evidence["observability.traces.catalog_storage_iceberg_spans"] == "true"
+
+
 def test_customer360_loki_helper_queries_logs_by_product_and_run() -> None:
     """Loki helper queries structured logs without live services."""
     client = _FakeClient(
@@ -319,7 +513,9 @@ def test_customer360_loki_helper_queries_logs_by_product_and_run() -> None:
 
     assert result.status is EvidenceStatus.PASS
     assert client.requests[0][0] == "http://loki/loki/api/v1/query_range"
-    assert 'customer-360" |= "run-123' in str(client.requests[0][1])
+    params = client.requests[0][1]
+    assert isinstance(params, Mapping)
+    assert params["query"] == '{service_name=~".+"} |= "customer-360" |= "run-123"'
 
 
 def test_customer360_prometheus_helper_queries_metrics_by_product_status_and_plugin() -> None:

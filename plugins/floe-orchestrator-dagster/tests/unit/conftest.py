@@ -30,6 +30,20 @@ if TYPE_CHECKING:
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
 
+@pytest.fixture(autouse=True)
+def disable_live_telemetry_flush(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep orchestrator unit tests from opening OTLP connections."""
+
+    def _noop_force_flush(*, timeout_millis: int = 5000) -> None:
+        _ = timeout_millis
+        return None
+
+    monkeypatch.setattr(
+        "floe_orchestrator_dagster.runtime.force_flush_telemetry",
+        _noop_force_flush,
+    )
+
+
 @pytest.fixture
 def dagster_plugin() -> DagsterOrchestratorPlugin:
     """Create a DagsterOrchestratorPlugin instance for testing."""

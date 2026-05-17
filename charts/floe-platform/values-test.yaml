@@ -378,6 +378,36 @@ otel:
       containerPort: 4318
       servicePort: 4318
       nodePort: 30418
+    prometheus:
+      enabled: true
+      containerPort: 9464
+      servicePort: 9464
+  config:
+    exporters:
+      debug:
+        verbosity: detailed
+      prometheus:
+        endpoint: 0.0.0.0:9464
+      otlphttp/loki:
+        endpoint: http://floe-platform-loki:3100/otlp
+      otlp/jaeger:
+        endpoint: "floe-platform-jaeger-collector:4317"
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug, otlp/jaeger]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [prometheus]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlphttp/loki]
   resources:
     requests:
       cpu: 50m
@@ -430,7 +460,10 @@ jaeger:
     type: memory
 
 prometheus:
-  enabled: false
+  enabled: true
+
+loki:
+  enabled: true
 
 grafana:
   enabled: false

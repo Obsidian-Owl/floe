@@ -25,6 +25,8 @@ from urllib.parse import quote
 import httpx
 from floe_core.telemetry.conventions import FLOE_PRODUCT_NAME, FLOE_RUN_ID
 
+from testing.fixtures.polling import wait_for_condition
+
 ASSET_MATERIALIZATIONS_METRIC = "floe_asset_materializations_total"
 ASSET_FAILURES_METRIC = "floe_asset_failures_total"
 METRIC_ASSET_KEY_LABEL = "floe_asset_key"
@@ -46,6 +48,34 @@ class EvidenceStatus(str, Enum):
 
 FAILURE_STATUSES = {"FAILURE", "FAILED", "ERROR", "CANCELED", "CANCELLED"}
 SUCCESS_STATUSES = {"SUCCESS", "SUCCEEDED", "COMPLETED", "OK", "PASS", "PASSED"}
+
+
+def _env_url(
+    primary_env: str,
+    *,
+    fallback_env: str | None = None,
+    host_env: str | None = None,
+    default_port: int | None = None,
+    default: str,
+) -> str:
+    """Resolve a backend URL from explicit demo env or in-cluster service env."""
+    explicit = _blank_to_none(os.environ.get(primary_env))
+    if explicit:
+        return explicit
+
+    if fallback_env:
+        fallback = _blank_to_none(os.environ.get(fallback_env))
+        if fallback:
+            return fallback
+
+    if host_env and default_port is not None:
+        host = _blank_to_none(os.environ.get(host_env))
+        if host:
+            if host.startswith(("http://", "https://")):
+                return host
+            return f"http://{host}:{default_port}"
+
+    return default
 
 
 @dataclass(frozen=True)
@@ -116,6 +146,8 @@ class Customer360ObservabilityConfig:
     run_evidence_file: Path | None = Path(".customer360-run.env")
     freshness_window_seconds: float = 1_800.0
     timeout_seconds: float = 30.0
+    evidence_poll_timeout_seconds: float = 30.0
+    evidence_poll_interval_seconds: float = 2.0
 
     @classmethod
     def from_env(cls) -> Customer360ObservabilityConfig:
@@ -128,14 +160,36 @@ class Customer360ObservabilityConfig:
             job_name=os.environ.get("FLOE_DEMO_LINEAGE_JOB", "customer-360"),
             metric_status=os.environ.get("FLOE_DEMO_METRIC_STATUS", "success"),
             metric_plugin=os.environ.get("FLOE_DEMO_METRIC_PLUGIN", ".+"),
-            dagster_url=os.environ.get("FLOE_DEMO_DAGSTER_URL", "http://localhost:3100"),
-            jaeger_url=os.environ.get("FLOE_DEMO_JAEGER_URL", "http://localhost:16686"),
-            loki_url=os.environ.get("FLOE_DEMO_LOKI_URL", "http://localhost:3101"),
-            prometheus_url=os.environ.get(
-                "FLOE_DEMO_PROMETHEUS_URL",
-                "http://localhost:9090",
+            dagster_url=_env_url(
+                "FLOE_DEMO_DAGSTER_URL",
+                fallback_env="DAGSTER_URL",
+                default="http://localhost:3100",
             ),
-            marquez_url=os.environ.get("FLOE_DEMO_MARQUEZ_URL", "http://localhost:5100"),
+            jaeger_url=_env_url(
+                "FLOE_DEMO_JAEGER_URL",
+                fallback_env="JAEGER_URL",
+                default="http://localhost:16686",
+            ),
+            loki_url=_env_url(
+                "FLOE_DEMO_LOKI_URL",
+                host_env="LOKI_HOST",
+                default_port=3100,
+                default="http://localhost:3101",
+            ),
+            prometheus_url=os.environ.get("FLOE_DEMO_PROMETHEUS_URL")
+            or _env_url(
+                "PROMETHEUS_URL",
+                host_env="PROMETHEUS_HOST",
+                default_port=9090,
+                default="http://localhost:9090",
+            ),
+            marquez_url=_env_url(
+                "FLOE_DEMO_MARQUEZ_URL",
+                fallback_env="MARQUEZ_URL",
+                host_env="MARQUEZ_HOST",
+                default_port=5000,
+                default="http://localhost:5100",
+            ),
             run_id=_blank_to_none(os.environ.get("FLOE_DEMO_RUN_ID")),
             run_evidence_file=Path(
                 os.environ.get("FLOE_DEMO_RUN_EVIDENCE_FILE", ".customer360-run.env")
@@ -144,6 +198,12 @@ class Customer360ObservabilityConfig:
                 os.environ.get("FLOE_DEMO_OBSERVABILITY_FRESHNESS_SECONDS", "1800")
             ),
             timeout_seconds=float(os.environ.get("FLOE_DEMO_COMMAND_TIMEOUT_SECONDS", "30")),
+            evidence_poll_timeout_seconds=float(
+                os.environ.get("FLOE_DEMO_OBSERVABILITY_POLL_TIMEOUT_SECONDS", "30")
+            ),
+            evidence_poll_interval_seconds=float(
+                os.environ.get("FLOE_DEMO_OBSERVABILITY_POLL_INTERVAL_SECONDS", "2")
+            ),
         )
 
 
@@ -425,7 +485,10 @@ def query_loki_logs(
     client: httpx.Client | None = None,
 ) -> EvidenceResult:
     """Query Loki structured logs by product/run context."""
-    loki_query = f'{{job=~".+"}} |= "{product}" |= "{run_id}"'
+    # The OTLP-to-Loki path maps OTel ``service.name`` to the Loki
+    # ``service_name`` label.  Do not depend on a Promtail-style ``job`` label;
+    # the alpha chart sends runtime logs directly through the collector.
+    loki_query = f'{{service_name=~".+"}} |= "{product}" |= "{run_id}"'
     url = _join_url(loki_url, "loki/api/v1/query_range")
     owns_client = client is None
     http_client = client or httpx.Client(timeout=timeout_seconds)
@@ -632,7 +695,6 @@ def validate_customer360_observability(
     trace_context = ObservabilityContext(
         product=config.product,
         run_id=resolved_run_id,
-        table=config.table,
         freshness_window_seconds=config.freshness_window_seconds,
     )
     run_context = ObservabilityContext(
@@ -646,8 +708,65 @@ def validate_customer360_observability(
         table=config.table,
         freshness_window_seconds=config.freshness_window_seconds,
     )
-    backend_results = (
-        dagster_result,
+    lineage_context = ObservabilityContext(
+        product=config.product,
+        run_id=resolved_run_id,
+        table=config.table,
+        freshness_window_seconds=config.freshness_window_seconds,
+    )
+    last_result: ObservabilityProofResult | None = None
+
+    def evidence_ready() -> bool:
+        nonlocal last_result
+        runtime_results = _query_runtime_observability_backends(
+            config=config,
+            trace_context=trace_context,
+            run_context=run_context,
+            metric_context=metric_context,
+            lineage_context=lineage_context,
+            resolved_run_id=resolved_run_id,
+        )
+        result = _build_proof_result(
+            run_id=resolved_run_id,
+            backend_results=(dagster_result, *runtime_results),
+        )
+        last_result = result
+        return result.ok
+
+    wait_for_condition(
+        evidence_ready,
+        timeout=max(0.0, config.evidence_poll_timeout_seconds),
+        interval=max(0.1, config.evidence_poll_interval_seconds),
+        description=f"Customer 360 observability evidence for run {resolved_run_id}",
+        raise_on_timeout=False,
+    )
+    if last_result is None:
+        runtime_results = _query_runtime_observability_backends(
+            config=config,
+            trace_context=trace_context,
+            run_context=run_context,
+            metric_context=metric_context,
+            lineage_context=lineage_context,
+            resolved_run_id=resolved_run_id,
+        )
+        last_result = _build_proof_result(
+            run_id=resolved_run_id,
+            backend_results=(dagster_result, *runtime_results),
+        )
+    return last_result
+
+
+def _query_runtime_observability_backends(
+    *,
+    config: Customer360ObservabilityConfig,
+    trace_context: ObservabilityContext,
+    run_context: ObservabilityContext,
+    metric_context: ObservabilityContext,
+    lineage_context: ObservabilityContext,
+    resolved_run_id: str,
+) -> tuple[EvidenceResult, EvidenceResult, EvidenceResult, EvidenceResult]:
+    """Query runtime backends that may ingest after Dagster reports success."""
+    return (
         query_trace_backend(
             jaeger_url=config.jaeger_url,
             service=config.service,
@@ -673,21 +792,29 @@ def validate_customer360_observability(
             marquez_url=config.marquez_url,
             namespace=config.namespace,
             job_name=config.job_name,
-            context=trace_context,
+            context=lineage_context,
             timeout_seconds=config.timeout_seconds,
         ),
     )
 
+
+def _build_proof_result(
+    *,
+    run_id: str,
+    backend_results: tuple[EvidenceResult, ...],
+) -> ObservabilityProofResult:
+    """Build an aggregate proof result from backend checks."""
     evidence = {}
     failures = []
     for result in backend_results:
         evidence.update(_result_evidence(result.backend, result))
         failures.extend(_result_failures(result))
-    evidence["observability.run_id"] = resolved_run_id
-    failures.extend(_trace_category_failures(backend_results[1], evidence))
+    evidence["observability.run_id"] = run_id
+    if len(backend_results) > 1:
+        failures.extend(_trace_category_failures(backend_results[1], evidence))
 
     return ObservabilityProofResult(
-        run_id=resolved_run_id,
+        run_id=run_id,
         evidence=evidence,
         failures=failures,
         backend_results=backend_results,

@@ -12,6 +12,8 @@ skipping or reporting a generic platform error.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 
 from testing.ci.customer360_observability import (
@@ -22,10 +24,15 @@ from testing.ci.customer360_observability import (
 
 
 @pytest.mark.e2e
-@pytest.mark.developer_workflow
+@pytest.mark.platform_blackbox
 @pytest.mark.requirement("platform-observability-defaults-task-7")
-def test_customer360_observability_gate() -> None:
+def test_customer360_observability_gate(trigger_lineage_run: Callable[..., None]) -> None:
     """A fresh Customer 360 run must have queryable observability evidence."""
+    trigger_lineage_run(
+        expected_namespace="customer-360",
+        expected_job_name="customer-360",
+    )
+
     result = validate_customer360_observability(Customer360ObservabilityConfig.from_env())
 
     assert result.run_id, _format_observability_failure(result)

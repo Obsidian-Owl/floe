@@ -18,7 +18,7 @@ import re
 import subprocess
 import tarfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import yaml
@@ -32,6 +32,8 @@ _FLUX_DIR = _REPO_ROOT / "testing" / "k8s" / "flux"
 _COMMON_SH = _REPO_ROOT / "testing" / "ci" / "common.sh"
 _PLATFORM_CHART_DIR = _REPO_ROOT / "charts" / "floe-platform"
 _PACKAGED_PLATFORM_CHART = _PLATFORM_CHART_DIR / "flux-artifacts" / "floe-platform.tgz"
+_PLATFORM_CHART_HELMIGNORE = _PLATFORM_CHART_DIR / ".helmignore"
+_MAX_PACKAGED_CHART_BYTES = 750 * 1024
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +47,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     content = path.read_text()
     docs = list(yaml.safe_load_all(content))
     assert len(docs) >= 1, f"No YAML documents in {path}"
-    return docs[0]
+    return cast("dict[str, Any]", docs[0])
 
 
 def _load_packaged_chart_yaml(package_path: Path, member_name: str) -> dict[str, Any]:
@@ -54,7 +56,7 @@ def _load_packaged_chart_yaml(package_path: Path, member_name: str) -> dict[str,
     with tarfile.open(package_path, "r:gz") as archive:
         member = archive.extractfile(member_name)
         assert member is not None, f"Packaged chart is missing {member_name}"
-        return yaml.safe_load(member.read().decode("utf-8"))
+        return cast("dict[str, Any]", yaml.safe_load(member.read().decode("utf-8")))
 
 
 def _load_packaged_chart_text(package_path: Path, member_name: str) -> str:
@@ -64,6 +66,17 @@ def _load_packaged_chart_text(package_path: Path, member_name: str) -> str:
         member = archive.extractfile(member_name)
         assert member is not None, f"Packaged chart is missing {member_name}"
         return member.read().decode("utf-8")
+
+
+def _source_chart_files_deployed_by_flux() -> list[Path]:
+    """Return first-party chart files that must stay in sync with the Flux package."""
+    files = [
+        *_PLATFORM_CHART_DIR.glob("values*.yaml"),
+        *_PLATFORM_CHART_DIR.rglob("templates/*.yaml"),
+        *_PLATFORM_CHART_DIR.rglob("templates/*.tpl"),
+        *_PLATFORM_CHART_DIR.rglob("templates/*.txt"),
+    ]
+    return sorted(path for path in files if path.is_file())
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +267,50 @@ def test_packaged_platform_chart_vendors_minio_dependency() -> None:
 
 
 @pytest.mark.requirement("AC-2")
+def test_platform_chart_helmignore_excludes_non_runtime_artifacts() -> None:
+    """Direct Helm installs must not store Flux packages or unit tests in releases."""
+    ignored_paths = set(_PLATFORM_CHART_HELMIGNORE.read_text().splitlines())
+
+    assert "flux-artifacts/" in ignored_paths, (
+        "charts/floe-platform/.helmignore must exclude flux-artifacts/ so a "
+        "direct Helm upgrade does not store a nested packaged chart inside the "
+        "Helm release Secret."
+    )
+    assert "/tests/" in ignored_paths, (
+        "charts/floe-platform/.helmignore must exclude helm-unittest suites; "
+        "they are source validation artifacts, not runtime chart content."
+    )
+
+
+@pytest.mark.requirement("AC-2")
+def test_packaged_platform_chart_excludes_non_runtime_artifacts() -> None:
+    """Flux chart package must not recursively include source-only artifacts."""
+    with tarfile.open(_PACKAGED_PLATFORM_CHART, "r:gz") as archive:
+        members = archive.getnames()
+
+    assert "floe-platform/flux-artifacts/floe-platform.tgz" not in members, (
+        "The packaged Flux chart must not recursively contain itself; that "
+        "bloats Helm release storage and can exceed the Kubernetes 1MiB Secret limit."
+    )
+    assert not any(member.startswith("floe-platform/tests/") for member in members), (
+        "helm-unittest suites must not be packaged into the runtime chart."
+    )
+
+
+@pytest.mark.requirement("AC-2")
+def test_packaged_platform_chart_stays_below_release_storage_budget() -> None:
+    """Packaged chart must leave headroom for Helm release Secret storage."""
+    package_size = _PACKAGED_PLATFORM_CHART.stat().st_size
+
+    assert package_size < _MAX_PACKAGED_CHART_BYTES, (
+        "The packaged floe-platform chart is too large for reliable Helm "
+        f"upgrades: {package_size} bytes exceeds budget "
+        f"{_MAX_PACKAGED_CHART_BYTES} bytes. Exclude non-runtime artifacts or "
+        "split optional chart dependencies before increasing this budget."
+    )
+
+
+@pytest.mark.requirement("AC-2")
 def test_packaged_platform_chart_polaris_secret_matches_source_template() -> None:
     """Packaged chart uses the current Polaris Secret template."""
     source_template = (_PLATFORM_CHART_DIR / "templates" / "secret-polaris.yaml").read_text()
@@ -266,6 +323,23 @@ def test_packaged_platform_chart_polaris_secret_matches_source_template() -> Non
         "The committed Flux chart package must be refreshed when "
         "templates/secret-polaris.yaml changes; Flux deploys the packaged chart, "
         "not the source chart directory."
+    )
+
+
+@pytest.mark.requirement("AC-2")
+@pytest.mark.parametrize("source_path", _source_chart_files_deployed_by_flux())
+def test_packaged_platform_chart_matches_first_party_source_files(source_path: Path) -> None:
+    """Flux chart package must contain current first-party templates and values."""
+    relative = source_path.relative_to(_PLATFORM_CHART_DIR)
+    packaged_text = _load_packaged_chart_text(
+        _PACKAGED_PLATFORM_CHART,
+        f"floe-platform/{relative.as_posix()}",
+    )
+
+    assert packaged_text == source_path.read_text(), (
+        "The committed Flux chart package is stale for "
+        f"{relative.as_posix()}; run `make helm-package-flux-artifact` and commit "
+        "charts/floe-platform/flux-artifacts/floe-platform.tgz."
     )
 
 
