@@ -143,7 +143,14 @@ def test_plugin_lifecycle_startup_success_uses_telemetry_helper(
 
     lifecycle.activate_plugin(PluginType.COMPUTE, "startup")
 
-    assert observations[0].call["phase"] == "startup"
+    assert observations[0].call == {
+        "plugin_type": "COMPUTE",
+        "plugin_name": "startup",
+        "plugin_version": "1.0.0",
+        "floe_api_version": "1.0",
+        "phase": "startup",
+        "extra": {"timeout": 30.0},
+    }
     assert observations[0].finishes == [{"status": "success"}]
 
 
@@ -165,6 +172,14 @@ def test_plugin_lifecycle_startup_failure_records_failure_and_preserves_error(
         lifecycle.activate_plugin(PluginType.COMPUTE, "failing")
 
     assert isinstance(exc_info.value.cause, ValueError)
+    assert observations[0].call == {
+        "plugin_type": "COMPUTE",
+        "plugin_name": "failing",
+        "plugin_version": "1.0.0",
+        "floe_api_version": "1.0",
+        "phase": "startup",
+        "extra": {"timeout": 30.0},
+    }
     assert observations[0].finishes == [{"status": "failure", "error_type": "ValueError"}]
 
 
@@ -185,7 +200,14 @@ def test_plugin_lifecycle_health_check_degraded_records_actual_status(
     results = lifecycle.health_check_all()
 
     assert results["COMPUTE:degraded"].state == HealthState.DEGRADED
-    assert observations[0].call["phase"] == "health_check"
+    assert observations[0].call == {
+        "plugin_type": "COMPUTE",
+        "plugin_name": "degraded",
+        "plugin_version": "1.0.0",
+        "floe_api_version": "1.0",
+        "phase": "health_check",
+        "extra": {"timeout": 5.0},
+    }
     assert observations[0].finishes == [{"status": "degraded"}]
 
 
@@ -217,6 +239,14 @@ def test_plugin_lifecycle_shutdown_failure_records_failure_and_continues(
     assert isinstance(results["COMPUTE:failing-shutdown"], RuntimeError)
     assert results["CATALOG:healthy"] is None
     shutdown_observations = [obs for obs in observations if obs.call["phase"] == "shutdown"]
+    assert {
+        "plugin_type": "COMPUTE",
+        "plugin_name": "failing-shutdown",
+        "plugin_version": "1.0.0",
+        "floe_api_version": "1.0",
+        "phase": "shutdown",
+        "extra": {"timeout": 30.0},
+    } in [obs.call for obs in shutdown_observations]
     assert {"status": "failure", "error_type": "RuntimeError"} in [
         finish for obs in shutdown_observations for finish in obs.finishes
     ]
