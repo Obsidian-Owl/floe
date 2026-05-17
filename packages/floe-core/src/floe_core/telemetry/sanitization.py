@@ -14,10 +14,11 @@ _SENSITIVE_KEY_PATTERN = re.compile(
     r"(?P<key>"
     r"x-amz-signature|x-amz-credential|x-amz-security-token|"
     r"awsaccesskeyid|signature|security-token|"
+    r"session_token|session-token|access_token|refresh_token|"
     r"password|secret_key|access_key|token|api_key|authorization|credential"
     r")"
     r"(?P<pre_sep>\s*)(?P<separator>[=:])(?P<post_sep>\s*)"
-    r"(?P<value>[^\s&#]+)",
+    r"(?P<value>(?:bearer|basic|digest|session|token)\s+[^\s&#]+|[^\s&#]+)",
     re.IGNORECASE,
 )
 _URL_CREDENTIAL_PATTERN = re.compile(

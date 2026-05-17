@@ -59,24 +59,47 @@ class TestSanitizeErrorMessage:
 
     @pytest.mark.requirement("6C-FR-014")
     def test_authorization_colon_separator(self) -> None:
-        r"""Test key with colon separator is redacted.
-
-        Validates that authorization: Bearer token patterns are replaced
-        with authorization: <REDACTED> (the regex matches both = and :
-        separators). Note: The regex \S+ only captures the first
-        non-whitespace token after the separator, so "Bearer" is redacted
-        but subsequent space-separated tokens remain.
-        """
+        """Test key with colon separator redacts the full authorization value."""
         # pragma: allowlist secret
         msg = "HTTP error: authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
         result = sanitize_error_message(msg)
 
-        # The regex only captures "Bearer" (first \S+ after colon),
-        # not the full token
-        assert (
-            result == "HTTP error: authorization: <REDACTED> eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
-        )
+        assert result == "HTTP error: authorization: <REDACTED>"
         assert "Bearer" not in result
+        assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in result
+
+    @pytest.mark.requirement("6C-FR-014")
+    def test_authorization_equals_bearer_redacts_full_value(self) -> None:
+        """Authorization=Bearer values redact both auth scheme and token."""
+        # pragma: allowlist secret
+        msg = "HTTP error: Authorization=Bearer eyJhbGciOiJIUzI1NiJ9 retrying"
+
+        result = sanitize_error_message(msg)
+
+        assert result == "HTTP error: Authorization=<REDACTED> retrying"
+        assert "Bearer" not in result
+        assert "eyJhbGciOiJIUzI1NiJ9" not in result
+
+    @pytest.mark.requirement("6C-FR-014")
+    def test_token_bearer_value_redacts_full_value(self) -> None:
+        """token=Bearer values redact both auth scheme and token."""
+        msg = "Auth failed: token=Bearer abc.def user=testuser"  # pragma: allowlist secret
+
+        result = sanitize_error_message(msg)
+
+        assert result == "Auth failed: token=<REDACTED> user=testuser"
+        assert "Bearer" not in result
+        assert "abc.def" not in result
+
+    @pytest.mark.requirement("6C-FR-014")
+    def test_session_token_redaction(self) -> None:
+        """Session token aliases are treated as sensitive keys."""
+        msg = "S3 failed: session_token=abc.def status=403"  # pragma: allowlist secret
+
+        result = sanitize_error_message(msg)
+
+        assert result == "S3 failed: session_token=<REDACTED> status=403"
+        assert "abc.def" not in result
 
     @pytest.mark.requirement("6C-FR-014")
     def test_truncation_to_max_length(self) -> None:

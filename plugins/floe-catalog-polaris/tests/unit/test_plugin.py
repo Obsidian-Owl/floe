@@ -520,7 +520,7 @@ class TestPolarisCatalogPluginTracing:
             # Verify span attributes
             call_kwargs = mock_catalog_span.call_args[1]
             assert call_kwargs["catalog_name"] == "polaris"
-            assert call_kwargs["catalog_uri"] == "https://polaris.example.com/api/catalog"
+            assert call_kwargs["catalog_uri"] == "https://polaris.example.com"
             assert call_kwargs["warehouse"] == "test_warehouse"
 
     @pytest.mark.requirement("FR-031")

@@ -263,7 +263,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
             tracer,
             "connect",
             catalog_name="polaris",
-            catalog_uri=cfg.uri,
+            catalog_uri=_safe_endpoint_identity(cfg.uri),
             warehouse=cfg.warehouse,
         ) as span:
             log = logger.bind(
@@ -345,7 +345,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 )
                 raise map_pyiceberg_error(
                     e,
-                    catalog_uri=cfg.uri,
+                    catalog_uri=_safe_endpoint_identity(cfg.uri),
                     operation="connect",
                 ) from e
 
@@ -516,20 +516,20 @@ class PolarisCatalogPlugin(CatalogPlugin):
             tracer,
             "create_namespace",
             catalog_name="polaris",
-            catalog_uri=cfg.uri,
+            catalog_uri=_safe_endpoint_identity(cfg.uri),
             warehouse=cfg.warehouse,
             namespace=namespace,
         ) as span:
             log = logger.bind(
                 namespace=namespace,
-                uri=cfg.uri,
+                uri=_safe_endpoint_identity(cfg.uri),
             )
             log.info("creating_namespace")
 
             try:
                 if self._catalog is None:
                     raise CatalogUnavailableError(
-                        catalog_uri=cfg.uri,
+                        catalog_uri=_safe_endpoint_identity(cfg.uri),
                         cause=ValueError("Catalog not connected. Call connect() first."),
                     )
 
@@ -544,17 +544,17 @@ class PolarisCatalogPlugin(CatalogPlugin):
             except PYICEBERG_EXCEPTION_TYPES as e:
                 # Map PyIceberg exceptions to floe errors
                 set_error_attributes(span, e)
-                log.error("create_namespace_failed", error=str(e))
+                _log_catalog_error(log, "create_namespace_failed", e)
                 raise map_pyiceberg_error(
                     e,
-                    catalog_uri=cfg.uri,
+                    catalog_uri=_safe_endpoint_identity(cfg.uri),
                     operation="create_namespace",
                 ) from e
 
             except Exception as e:
                 # Catch any other unexpected exceptions
                 set_error_attributes(span, e)
-                log.error("create_namespace_failed", error=str(e))
+                _log_catalog_error(log, "create_namespace_failed", e)
                 raise
 
     def list_namespaces(self, parent: str | None = None) -> list[str]:
@@ -590,20 +590,20 @@ class PolarisCatalogPlugin(CatalogPlugin):
             tracer,
             "list_namespaces",
             catalog_name="polaris",
-            catalog_uri=cfg.uri,
+            catalog_uri=_safe_endpoint_identity(cfg.uri),
             warehouse=cfg.warehouse,
             extra_attributes=extra_attrs,
         ) as span:
             log = logger.bind(
                 parent=parent,
-                uri=cfg.uri,
+                uri=_safe_endpoint_identity(cfg.uri),
             )
             log.info("listing_namespaces")
 
             try:
                 if self._catalog is None:
                     raise CatalogUnavailableError(
-                        catalog_uri=cfg.uri,
+                        catalog_uri=_safe_endpoint_identity(cfg.uri),
                         cause=ValueError("Catalog not connected. Call connect() first."),
                     )
 
@@ -626,17 +626,17 @@ class PolarisCatalogPlugin(CatalogPlugin):
             except PYICEBERG_EXCEPTION_TYPES as e:
                 # Map PyIceberg exceptions to floe errors
                 set_error_attributes(span, e)
-                log.error("list_namespaces_failed", error=str(e))
+                _log_catalog_error(log, "list_namespaces_failed", e)
                 raise map_pyiceberg_error(
                     e,
-                    catalog_uri=cfg.uri,
+                    catalog_uri=_safe_endpoint_identity(cfg.uri),
                     operation="list_namespaces",
                 ) from e
 
             except Exception as e:
                 # Catch any other unexpected exceptions
                 set_error_attributes(span, e)
-                log.error("list_namespaces_failed", error=str(e))
+                _log_catalog_error(log, "list_namespaces_failed", e)
                 raise
 
     def delete_namespace(self, namespace: str) -> None:
@@ -665,20 +665,20 @@ class PolarisCatalogPlugin(CatalogPlugin):
             tracer,
             "delete_namespace",
             catalog_name="polaris",
-            catalog_uri=cfg.uri,
+            catalog_uri=_safe_endpoint_identity(cfg.uri),
             warehouse=cfg.warehouse,
             namespace=namespace,
         ) as span:
             log = logger.bind(
                 namespace=namespace,
-                uri=cfg.uri,
+                uri=_safe_endpoint_identity(cfg.uri),
             )
             log.info("deleting_namespace")
 
             try:
                 if self._catalog is None:
                     raise CatalogUnavailableError(
-                        catalog_uri=cfg.uri,
+                        catalog_uri=_safe_endpoint_identity(cfg.uri),
                         cause=ValueError("Catalog not connected. Call connect() first."),
                     )
 
@@ -690,17 +690,17 @@ class PolarisCatalogPlugin(CatalogPlugin):
             except PYICEBERG_EXCEPTION_TYPES as e:
                 # Map PyIceberg exceptions to floe errors
                 set_error_attributes(span, e)
-                log.error("delete_namespace_failed", error=str(e))
+                _log_catalog_error(log, "delete_namespace_failed", e)
                 raise map_pyiceberg_error(
                     e,
-                    catalog_uri=cfg.uri,
+                    catalog_uri=_safe_endpoint_identity(cfg.uri),
                     operation="delete_namespace",
                 ) from e
 
             except Exception as e:
                 # Catch any other unexpected exceptions
                 set_error_attributes(span, e)
-                log.error("delete_namespace_failed", error=str(e))
+                _log_catalog_error(log, "delete_namespace_failed", e)
                 raise
 
     def create_table(
@@ -739,20 +739,20 @@ class PolarisCatalogPlugin(CatalogPlugin):
             tracer,
             "create_table",
             catalog_name="polaris",
-            catalog_uri=cfg.uri,
+            catalog_uri=_safe_endpoint_identity(cfg.uri),
             warehouse=cfg.warehouse,
             table_full_name=identifier,
         ) as span:
             log = logger.bind(
                 table=identifier,
-                uri=cfg.uri,
+                uri=_safe_endpoint_identity(cfg.uri),
             )
             log.info("creating_table")
 
             try:
                 if self._catalog is None:
                     raise CatalogUnavailableError(
-                        catalog_uri=cfg.uri,
+                        catalog_uri=_safe_endpoint_identity(cfg.uri),
                         cause=ValueError("Catalog not connected. Call connect() first."),
                     )
 
@@ -771,17 +771,17 @@ class PolarisCatalogPlugin(CatalogPlugin):
             except PYICEBERG_EXCEPTION_TYPES as e:
                 # Map PyIceberg exceptions to floe errors
                 set_error_attributes(span, e)
-                log.error("create_table_failed", error=str(e))
+                _log_catalog_error(log, "create_table_failed", e)
                 raise map_pyiceberg_error(
                     e,
-                    catalog_uri=cfg.uri,
+                    catalog_uri=_safe_endpoint_identity(cfg.uri),
                     operation="create_table",
                 ) from e
 
             except Exception as e:
                 # Catch any other unexpected exceptions
                 set_error_attributes(span, e)
-                log.error("create_table_failed", error=str(e))
+                _log_catalog_error(log, "create_table_failed", e)
                 raise
 
     def list_tables(self, namespace: str) -> list[str]:
@@ -810,20 +810,20 @@ class PolarisCatalogPlugin(CatalogPlugin):
             tracer,
             "list_tables",
             catalog_name="polaris",
-            catalog_uri=cfg.uri,
+            catalog_uri=_safe_endpoint_identity(cfg.uri),
             warehouse=cfg.warehouse,
             namespace=namespace,
         ) as span:
             log = logger.bind(
                 namespace=namespace,
-                uri=cfg.uri,
+                uri=_safe_endpoint_identity(cfg.uri),
             )
             log.info("listing_tables")
 
             try:
                 if self._catalog is None:
                     raise CatalogUnavailableError(
-                        catalog_uri=cfg.uri,
+                        catalog_uri=_safe_endpoint_identity(cfg.uri),
                         cause=ValueError("Catalog not connected. Call connect() first."),
                     )
 
@@ -840,17 +840,17 @@ class PolarisCatalogPlugin(CatalogPlugin):
             except PYICEBERG_EXCEPTION_TYPES as e:
                 # Map PyIceberg exceptions to floe errors
                 set_error_attributes(span, e)
-                log.error("list_tables_failed", error=str(e))
+                _log_catalog_error(log, "list_tables_failed", e)
                 raise map_pyiceberg_error(
                     e,
-                    catalog_uri=cfg.uri,
+                    catalog_uri=_safe_endpoint_identity(cfg.uri),
                     operation="list_tables",
                 ) from e
 
             except Exception as e:
                 # Catch any other unexpected exceptions
                 set_error_attributes(span, e)
-                log.error("list_tables_failed", error=str(e))
+                _log_catalog_error(log, "list_tables_failed", e)
                 raise
 
     def drop_table(self, identifier: str, purge: bool = False) -> None:
@@ -878,21 +878,21 @@ class PolarisCatalogPlugin(CatalogPlugin):
             tracer,
             "drop_table",
             catalog_name="polaris",
-            catalog_uri=cfg.uri,
+            catalog_uri=_safe_endpoint_identity(cfg.uri),
             warehouse=cfg.warehouse,
             table_full_name=identifier,
         ) as span:
             log = logger.bind(
                 table=identifier,
                 purge=purge,
-                uri=cfg.uri,
+                uri=_safe_endpoint_identity(cfg.uri),
             )
             log.info("dropping_table")
 
             try:
                 if self._catalog is None:
                     raise CatalogUnavailableError(
-                        catalog_uri=cfg.uri,
+                        catalog_uri=_safe_endpoint_identity(cfg.uri),
                         cause=ValueError("Catalog not connected. Call connect() first."),
                     )
 
@@ -906,17 +906,17 @@ class PolarisCatalogPlugin(CatalogPlugin):
             except PYICEBERG_EXCEPTION_TYPES as e:
                 # Map PyIceberg exceptions to floe errors
                 set_error_attributes(span, e)
-                log.error("drop_table_failed", error=str(e))
+                _log_catalog_error(log, "drop_table_failed", e)
                 raise map_pyiceberg_error(
                     e,
-                    catalog_uri=cfg.uri,
+                    catalog_uri=_safe_endpoint_identity(cfg.uri),
                     operation="drop_table",
                 ) from e
 
             except Exception as e:
                 # Catch any other unexpected exceptions
                 set_error_attributes(span, e)
-                log.error("drop_table_failed", error=str(e))
+                _log_catalog_error(log, "drop_table_failed", e)
                 raise
 
     def vend_credentials(
@@ -966,7 +966,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
             tracer,
             "vend_credentials",
             catalog_name="polaris",
-            catalog_uri=cfg.uri,
+            catalog_uri=_safe_endpoint_identity(cfg.uri),
             warehouse=cfg.warehouse,
             table_full_name=table_path,
             extra_attributes={
@@ -980,7 +980,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
             log = logger.bind(
                 table=table_path,
                 operations=operations,
-                uri=cfg.uri,
+                uri=_safe_endpoint_identity(cfg.uri),
             )
 
             # Check if credential vending is enabled
@@ -1000,7 +1000,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
             try:
                 if self._catalog is None:
                     raise CatalogUnavailableError(
-                        catalog_uri=cfg.uri,
+                        catalog_uri=_safe_endpoint_identity(cfg.uri),
                         cause=ValueError("Catalog not connected. Call connect() first."),
                     )
 
@@ -1027,17 +1027,17 @@ class PolarisCatalogPlugin(CatalogPlugin):
             except PYICEBERG_EXCEPTION_TYPES as e:
                 # Map PyIceberg exceptions to floe errors
                 set_error_attributes(span, e)
-                log.error("vend_credentials_failed", error=str(e))
+                _log_catalog_error(log, "vend_credentials_failed", e)
                 raise map_pyiceberg_error(
                     e,
-                    catalog_uri=cfg.uri,
+                    catalog_uri=_safe_endpoint_identity(cfg.uri),
                     operation="vend_credentials",
                 ) from e
 
             except Exception as e:
                 # Catch any other unexpected exceptions
                 set_error_attributes(span, e)
-                log.error("vend_credentials_failed", error=str(e))
+                _log_catalog_error(log, "vend_credentials_failed", e)
                 raise
 
     def _execute_health_probe(
@@ -1162,17 +1162,21 @@ class PolarisCatalogPlugin(CatalogPlugin):
         if not (0.1 <= timeout <= 10.0):
             raise ValueError(f"timeout must be between 0.1 and 10.0 seconds, got {timeout}")
 
-        log = logger.bind(operation="health_check", timeout=timeout)
+        cfg = self._require_config()
+        log = logger.bind(
+            operation="health_check",
+            timeout=timeout,
+            uri=_safe_endpoint_identity(cfg.uri),
+        )
         checked_at = datetime.now(timezone.utc)
         start_time = time.perf_counter()
 
-        cfg = self._require_config()
         tracer = get_tracer()
         with catalog_span(
             tracer,
             "health_check",
             catalog_name="polaris",
-            catalog_uri=cfg.uri,
+            catalog_uri=_safe_endpoint_identity(cfg.uri),
             warehouse=cfg.warehouse,
         ) as span:
             # Check if plugin is connected
@@ -1214,7 +1218,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
 
             except Exception as e:
                 elapsed_ms = (time.perf_counter() - start_time) * 1000
-                error_message = str(e) if str(e) else type(e).__name__
+                error_message = sanitize_error_message(str(e) if str(e) else type(e).__name__)
                 log.warning(
                     "health_check_failed",
                     response_time_ms=elapsed_ms,
@@ -1226,6 +1230,14 @@ class PolarisCatalogPlugin(CatalogPlugin):
                     set_error_attributes(span, e)
 
                 return self._build_error_status(error_message, elapsed_ms, checked_at, timeout)
+
+
+def _log_catalog_error(log: Any, event: str, error: Exception) -> None:
+    log.error(
+        event,
+        error_type=type(error).__name__,
+        error_message=sanitize_error_message(str(error)),
+    )
 
 
 def _safe_endpoint_identity(uri: str) -> str:

@@ -321,6 +321,26 @@ def test_record_event_send_records_correlation_context_without_payload() -> None
     )
 
 
+@pytest.mark.requirement("OBS-T4")
+def test_lineage_log_context_uses_secret_free_endpoint_identity() -> None:
+    """Marquez observability logs do not include URL credentials or query tokens."""
+    plugin = MarquezLineageBackendPlugin(
+        url=(
+            "https://user:"
+            "super-secret@marquez.example.com:5000/api?"
+            "X-Amz-Signature=signature-secret&token=query-token#fragment-token"
+        )
+    )
+
+    context = plugin._lineage_log_context(status="success")
+
+    assert context["lineage.endpoint"] == "https://marquez.example.com:5000"
+    assert "super-secret" not in str(context)
+    assert "signature-secret" not in str(context)
+    assert "query-token" not in str(context)
+    assert "fragment-token" not in str(context)
+
+
 @pytest.mark.requirement("REQ-527")
 def test_validate_connection_failure_timeout() -> None:
     """Test that validate_connection returns False on timeout.

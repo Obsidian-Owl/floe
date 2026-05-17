@@ -39,6 +39,25 @@ def _plugin_with_secret_url() -> PolarisCatalogPlugin:
     )
 
 
+def _plugin_with_presigned_secret_url() -> PolarisCatalogPlugin:
+    return PolarisCatalogPlugin(
+        config=PolarisCatalogConfig(
+            uri=(
+                "https://user:"
+                "super-secret@polaris.example.com/api/catalog?"
+                "X-Amz-Signature=signature-secret&token=query-token#fragment-token"
+            ),
+            warehouse="floe",
+            oauth2=OAuth2Config(
+                client_id="polaris",
+                client_secret=SecretStr("oauth-secret"),
+                token_url="https://auth.example.com/oauth/token",
+            ),
+            max_retries=0,
+        )
+    )
+
+
 def _storage_binding() -> StorageDeploymentBinding:
     return StorageDeploymentBinding(
         provider="minio",
@@ -162,6 +181,68 @@ def test_connect_failure_logs_sanitized_error_message() -> None:
     assert "super-token" not in str(mock_logger.method_calls)
     assert "X-Amz-Signature=abc" not in str(mock_logger.method_calls)
     assert "X-Amz-Credential=cred" not in str(mock_logger.method_calls)
+
+
+def test_create_namespace_failure_logs_secret_free_uri_and_error_message() -> None:
+    """Non-connect catalog failures use sanitized endpoint and error fields."""
+    plugin = _plugin_with_presigned_secret_url()
+    plugin._catalog = MagicMock()
+    plugin._catalog.create_namespace.side_effect = RuntimeError(
+        "create failed Authorization=Bearer abc.def "
+        "https://bucket.s3.amazonaws.com/key?X-Amz-Signature=secret&safe=value"
+    )
+
+    with (
+        patch("floe_catalog_polaris.plugin.get_tracer"),
+        patch("floe_catalog_polaris.plugin.logger") as mock_logger,
+    ):
+        try:
+            plugin.create_namespace("bronze")
+        except RuntimeError:
+            pass
+
+    bind_kwargs = mock_logger.bind.call_args.kwargs
+    assert bind_kwargs["uri"] == "https://polaris.example.com"
+    log_kwargs = mock_logger.bind.return_value.error.call_args.kwargs
+    assert log_kwargs["error_type"] == "RuntimeError"
+    assert log_kwargs["error_message"] == (
+        "create failed Authorization=<REDACTED> "
+        "https://bucket.s3.amazonaws.com/key?X-Amz-Signature=<REDACTED>&safe=value"
+    )
+    assert "super-secret" not in str(mock_logger.method_calls)
+    assert "signature-secret" not in str(mock_logger.method_calls)
+    assert "abc.def" not in str(mock_logger.method_calls)
+    assert "X-Amz-Signature=secret" not in str(mock_logger.method_calls)
+
+
+def test_health_check_failure_status_and_logs_are_secret_free() -> None:
+    """health_check() sanitizes logged and returned probe failure details."""
+    plugin = _plugin_with_presigned_secret_url()
+    plugin._catalog = MagicMock()
+    plugin._catalog.list_namespaces.side_effect = RuntimeError(
+        "probe failed token=Bearer abc.def s3://bucket/key?AWSAccessKeyId=access&Signature=sig"
+    )
+
+    with (
+        patch("floe_catalog_polaris.plugin.get_tracer"),
+        patch("floe_catalog_polaris.plugin.logger") as mock_logger,
+    ):
+        status = plugin.health_check()
+
+    assert status.state == HealthState.UNHEALTHY
+    assert status.details["error"] == (
+        "probe failed token=<REDACTED> "
+        "s3://bucket/key?AWSAccessKeyId=<REDACTED>&Signature=<REDACTED>"
+    )
+    assert "abc.def" not in status.message
+    assert "access" not in status.message
+    assert "sig" not in status.message
+    bind_kwargs = mock_logger.bind.call_args.kwargs
+    assert bind_kwargs["uri"] == "https://polaris.example.com"
+    warning_kwargs = mock_logger.bind.return_value.warning.call_args.kwargs
+    assert warning_kwargs["error"] == status.details["error"]
+    assert "query-token" not in str(mock_logger.method_calls)
+    assert "abc.def" not in str(mock_logger.method_calls)
 
 
 def test_build_catalog_deployment_emits_secret_free_storage_context() -> None:

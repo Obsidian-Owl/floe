@@ -15,7 +15,7 @@ import logging
 import os
 import urllib.request
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import SplitResult, urlparse, urlsplit, urlunsplit
 
 from floe_core.plugins.lineage import LineageBackendPlugin
 from floe_core.telemetry.metrics import MetricRecorder
@@ -90,6 +90,28 @@ def _log_insecure_http_once(hostname: str, *, level: int, environment: str) -> N
         "INSECURE HTTP enabled for Marquez URL '%s' - development/test use only! "
         "Use HTTPS before deploying to production.",
         hostname,
+    )
+
+
+def _safe_endpoint_identity(uri: str) -> str:
+    """Return a credential-free endpoint identity for Marquez observability."""
+    parsed = urlsplit(uri)
+    if not (parsed.scheme and parsed.hostname):
+        return "[REDACTED]"
+    hostname = parsed.hostname
+    host = f"[{hostname}]" if ":" in hostname and not hostname.startswith("[") else hostname
+    try:
+        netloc = f"{host}:{parsed.port}" if parsed.port is not None else host
+    except ValueError:
+        return "[REDACTED]"
+    return urlunsplit(
+        SplitResult(
+            scheme=parsed.scheme,
+            netloc=netloc,
+            path="",
+            query="",
+            fragment="",
+        )
     )
 
 
@@ -602,7 +624,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
     ) -> dict[str, str]:
         fields = {
             "lineage.backend": "marquez",
-            "lineage.endpoint": self._url,
+            "lineage.endpoint": _safe_endpoint_identity(self._url),
             "lineage.environment": self._environment,
             "lineage.status": status,
         }
