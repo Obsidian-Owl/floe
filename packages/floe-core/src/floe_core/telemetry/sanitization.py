@@ -22,7 +22,7 @@ _SENSITIVE_KEY_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _URL_CREDENTIAL_PATTERN = re.compile(
-    r"://[^@/\s]+:[^@/\s]+@",
+    r"://[^@/\s]+@",
 )
 
 
@@ -45,7 +45,7 @@ def sanitize_error_message(msg: str, max_length: int = 500) -> str:
         >>> sanitize_error_message("Failed: password=secret123 at host")
         'Failed: password=<REDACTED> at host'
     """
-    # Redact URL credentials like ://user:pass@host
+    # Redact URL userinfo like ://token@host or ://user:pass@host.
     sanitized = _URL_CREDENTIAL_PATTERN.sub("://<REDACTED>@", msg)
     # Redact key=value patterns for sensitive keys without consuming URL delimiters
     # or adjacent non-sensitive query parameters.

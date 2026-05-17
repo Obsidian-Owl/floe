@@ -26,6 +26,41 @@ class TestSanitizeErrorMessage:
         assert "secret123" not in result
 
     @pytest.mark.requirement("6C-FR-014")
+    def test_url_userinfo_token_redaction(self) -> None:
+        """URL userinfo without a colon is redacted."""
+        msg = "Connection failed to https://api-token@example.com/path"
+
+        result = sanitize_error_message(msg)
+
+        assert result == "Connection failed to https://<REDACTED>@example.com/path"
+        assert "api-token" not in result
+
+    @pytest.mark.requirement("6C-FR-014")
+    def test_url_userinfo_username_redaction(self) -> None:
+        """Database URL userinfo without a password is redacted."""
+        msg = "Connection failed to postgresql://user@db.example.com/db"
+
+        result = sanitize_error_message(msg)
+
+        assert result == "Connection failed to postgresql://<REDACTED>@db.example.com/db"
+        assert "user@db" not in result
+
+    @pytest.mark.requirement("6C-FR-014")
+    def test_url_userinfo_and_query_credentials_are_redacted(self) -> None:
+        """URL userinfo and presigned query credentials are both redacted."""
+        msg = "Fetch failed for https://api-token@example.com/path?X-Amz-Signature=abc&safe=value"
+
+        result = sanitize_error_message(msg)
+
+        assert result == (
+            "Fetch failed for "
+            "https://<REDACTED>@example.com/path?X-Amz-Signature=<REDACTED>&safe=value"
+        )
+        assert "api-token" not in result
+        assert "X-Amz-Signature=abc" not in result
+        assert "safe=value" in result
+
+    @pytest.mark.requirement("6C-FR-014")
     def test_password_key_value_redaction(self) -> None:
         """Test key-value redaction for password field.
 
