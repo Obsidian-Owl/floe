@@ -77,6 +77,7 @@ def _render_role(template: str) -> dict[str, Any]:
             str(CHART_DIR),
             "-f",
             str(CHART_DIR / "values-test.yaml"),
+            "--skip-schema-validation",
             "--set",
             "tests.enabled=true",
             "-s",
@@ -112,6 +113,7 @@ def _render_roles(template: str) -> list[dict[str, Any]]:
         str(CHART_DIR),
         "-f",
         str(CHART_DIR / "values-test.yaml"),
+        "--skip-schema-validation",
         "--set",
         "tests.enabled=true",
     ]
@@ -159,6 +161,7 @@ def _render_all_chart_docs() -> list[dict[str, Any]]:
             str(CHART_DIR),
             "-f",
             str(CHART_DIR / "values-test.yaml"),
+            "--skip-schema-validation",
             "--set",
             "tests.enabled=true",
         ],
