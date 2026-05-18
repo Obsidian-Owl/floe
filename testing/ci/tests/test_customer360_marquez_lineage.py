@@ -23,10 +23,13 @@ TABLE = "mart_customer_360"
 DATASET_NAME = "customer_360.main.mart_customer_360"
 UPSTREAM_DATASET_NAME = "customer_360.main.stg_customers"
 DOWNSTREAM_DATASET_NAME = "customer_360.main.customer_360_export"
+SNAPSHOT_DATASET_NAME = "customer_360.main.mart_customer_360_snapshot"
 DATASET_NODE_ID = f"dataset:{NAMESPACE}:{DATASET_NAME}"
 UPSTREAM_DATASET_NODE_ID = f"dataset:{NAMESPACE}:{UPSTREAM_DATASET_NAME}"
 DOWNSTREAM_DATASET_NODE_ID = f"dataset:{NAMESPACE}:{DOWNSTREAM_DATASET_NAME}"
+SNAPSHOT_DATASET_NODE_ID = f"dataset:{NAMESPACE}:{SNAPSHOT_DATASET_NAME}"
 JOB_NODE_ID = f"job:{NAMESPACE}:{DATASET_NAME}"
+SNAPSHOT_JOB_NODE_ID = f"job:{NAMESPACE}:{SNAPSHOT_DATASET_NAME}"
 FRESH_EPOCH_SECONDS = 1_700_000_000.0
 
 
@@ -359,6 +362,40 @@ def test_marquez_product_runs_with_downstream_only_lineage_graph_are_contract_ga
                     "edges": [
                         {"origin": DATASET_NODE_ID, "destination": JOB_NODE_ID},
                         {"origin": JOB_NODE_ID, "destination": DOWNSTREAM_DATASET_NODE_ID},
+                    ],
+                },
+            },
+        )
+    )
+
+    result = _query(client)
+
+    assert result.status is EvidenceStatus.CONTRACT_GAP
+    assert result.diagnostics["contract_gap"] == "marquez_lineage_graph_detail"
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_marquez_product_runs_ignore_similarly_named_dataset_graph_branch() -> None:
+    """Only the exact requested dataset node can seed model/table depth traversal."""
+    client = _FakeMarquezClient(
+        _routes(
+            lineage={
+                "graph": {
+                    "nodes": [
+                        {"id": DATASET_NODE_ID, "type": "DATASET"},
+                        {"id": UPSTREAM_DATASET_NODE_ID, "type": "DATASET"},
+                        {"id": SNAPSHOT_JOB_NODE_ID, "type": "JOB"},
+                        {"id": SNAPSHOT_DATASET_NODE_ID, "type": "DATASET"},
+                    ],
+                    "edges": [
+                        {
+                            "origin": UPSTREAM_DATASET_NODE_ID,
+                            "destination": SNAPSHOT_JOB_NODE_ID,
+                        },
+                        {
+                            "origin": SNAPSHOT_JOB_NODE_ID,
+                            "destination": SNAPSHOT_DATASET_NODE_ID,
+                        },
                     ],
                 },
             },

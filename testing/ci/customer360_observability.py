@@ -1406,12 +1406,28 @@ def _marquez_graph_target_dataset_ids(
 ) -> set[str]:
     if not context.table:
         return set()
+    expected_dataset_name = _marquez_graph_expected_dataset_name(payload)
+    if expected_dataset_name is None:
+        return set()
     return {
         node_id
         for node_id in _marquez_graph_node_ids(payload)
-        if _marquez_node_id_is_dataset_in_namespace(node_id, namespace=namespace)
-        and _contains_value(node_id, context.table or "")
+        if _marquez_dataset_node_name(node_id, namespace=namespace) == expected_dataset_name
     }
+
+
+def _marquez_graph_expected_dataset_name(payload: Mapping[str, Any]) -> str | None:
+    name = payload.get("dataset_name") or payload.get("datasetName")
+    if not isinstance(name, str) or not name.strip():
+        return None
+    return name.strip()
+
+
+def _marquez_dataset_node_name(node_id: str, *, namespace: str) -> str | None:
+    prefix = f"dataset:{namespace}:"
+    if not node_id.lower().startswith(prefix.lower()):
+        return None
+    return node_id[len(prefix) :]
 
 
 def _marquez_graph_adjacency(
