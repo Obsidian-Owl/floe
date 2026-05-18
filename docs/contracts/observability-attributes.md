@@ -89,6 +89,37 @@ floe_asset_materializations_total{
 }
 ```
 
+## Alpha Operability Evidence Keys
+
+Customer 360 is the alpha proof fixture for the platform operability contract.
+Validators should emit deterministic evidence keys under these families:
+
+| Key family | Purpose | Example evidence |
+| --- | --- | --- |
+| `run_control.*` | Orchestrator run identity, final state, and product/job context | `run_control.dagster.status=success` |
+| `storage.*` | Iceberg table data, metadata, and object-store readability | `storage.customer_360_outputs=true` |
+| `business.*` | Product-level business assertions from the generated mart | `business.customer_count=42` |
+| `observability.traces.*` | Trace backend reachability, freshness, product/run context, and span depth | `observability.traces.count=5` |
+| `observability.logs.*` | Log backend readiness, freshness, product/run context, and structured runtime events | `observability.logs.status=pass` |
+| `observability.metrics.*` | Prometheus-compatible metric reachability, freshness, and contract metric samples | `observability.metrics.count=3` |
+| `observability.lineage.*` | OpenLineage/Marquez namespace, jobs, runs, datasets, facets, and graph evidence | `observability.lineage.status=pass` |
+| `observability.grafana.*` | Grafana datasource and curated dashboard panel query truthfulness | `observability.grafana.datasource.status=pass` |
+
+Existing `evidence.*` keys remain compatible during alpha so older validation
+outputs and release notes can still be compared. New validators should use the
+expanded key families above and classify failures with the classes below.
+
+| Failure class | Use when |
+| --- | --- |
+| `product_failure` | The Customer 360 run, model execution, data output, or business assertion failed. |
+| `platform_service_failure` | A required platform service is deployed but unhealthy or returning service-level errors. |
+| `backend_unreachable` | A backend API, service URL, tunnel, port-forward, or collector/exporter path is unavailable. |
+| `no_fresh_evidence` | The backend is reachable but has no records for the expected product, run, table, or proof window. |
+| `wrong_context` | Evidence exists but belongs to another product, run, namespace, table, service, or datasource. |
+| `stale_evidence` | Evidence exists only outside the accepted freshness window. |
+| `dashboard_datasource_drift` | Grafana panel queries are valid in a backend but fail or return empty results through the configured datasource. |
+| `contract_gap` | The current runtime or backend cannot produce a required alpha evidence family yet. |
+
 ## OpenLineage Correlation
 
 Customer 360 lineage proof requires two pieces of evidence:
