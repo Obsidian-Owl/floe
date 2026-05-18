@@ -1,6 +1,26 @@
 {{- if .Values.observability.grafana.enabled }}
 {{- $grafanaDatasources := .Values.observability.grafana.datasources | default list }}
 {{- $hasCustomGrafanaDatasources := gt (len $grafanaDatasources) 0 }}
+{{- $datasourceUids := .Values.observability.grafana.datasourceUids | default dict }}
+{{- $prometheusDatasourceUid := (get $datasourceUids "prometheus") | default (.Values.observability.grafana.datasourceUid | default "prometheus") }}
+{{- $lokiDatasourceUid := (get $datasourceUids "loki") | default "loki" }}
+{{- $jaegerDatasourceUid := (get $datasourceUids "jaeger") | default "jaeger" }}
+{{- $customDatasourceUids := list }}
+{{- range $grafanaDatasources }}
+{{- if .uid }}
+{{- $customDatasourceUids = append $customDatasourceUids (tpl (toString .uid) $) }}
+{{- end }}
+{{- end }}
+{{- if $hasCustomGrafanaDatasources }}
+{{- if and .Values.prometheus.enabled (not (has $prometheusDatasourceUid $customDatasourceUids)) }}
+{{- fail (printf "dashboard_datasource_drift: Prometheus dashboards require datasource UID %q, but observability.grafana.datasources provides UIDs %v. Set observability.grafana.datasourceUids.prometheus to the custom Prometheus UID or provide a datasource with the expected UID." $prometheusDatasourceUid $customDatasourceUids) }}
+{{- end }}
+{{- if and .Values.prometheus.enabled .Values.loki.enabled (not (has $lokiDatasourceUid $customDatasourceUids)) }}
+{{- fail (printf "dashboard_datasource_drift: Loki dashboard panels require datasource UID %q, but observability.grafana.datasources provides UIDs %v. Set observability.grafana.datasourceUids.loki to the custom Loki UID or provide a datasource with the expected UID." $lokiDatasourceUid $customDatasourceUids) }}
+{{- end }}
+{{- end }}
+{{- $dashboardContext := merge (dict "PrometheusDatasourceUid" $prometheusDatasourceUid "LokiDatasourceUid" $lokiDatasourceUid "JaegerDatasourceUid" $jaegerDatasourceUid "GrafanaRefreshInterval" (.Values.observability.grafana.refreshInterval | default "30s")) . }}
+{{- if .Values.prometheus.enabled }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -16,17 +36,13 @@ metadata:
     helm.sh/hook-weight: "-5"
 data:
   pipeline-metrics.json: |
-{{ .Files.Get "dashboards/pipeline-metrics.json" | indent 4 }}
-  data-quality.json: |
-{{ .Files.Get "dashboards/data-quality.json" | indent 4 }}
-  lineage-overview.json: |
-{{ .Files.Get "dashboards/lineage-overview.json" | indent 4 }}
+{{ tpl (.Files.Get "dashboards/pipeline-metrics.json") $dashboardContext | indent 4 }}
   {{- if and .Values.prometheus.enabled .Values.loki.enabled }}
   observability-backends.json: |
     {
       "uid": "floe-observability-backends",
-      "title": "Floe Observability Backends",
-      "tags": ["floe", "otel", "logs", "metrics"],
+      "title": "Floe Backend Operability",
+      "tags": ["floe", "alpha", "otel", "logs", "metrics"],
       "timezone": "browser",
       "schemaVersion": 38,
       "version": 1,
@@ -39,18 +55,18 @@ data:
       "panels": [
         {
           "id": 1,
-          "type": "timeseries",
-          "title": "Asset Materializations",
+          "type": "stat",
+          "title": "OTel Collector Target",
           "targets": [
             {
-              "expr": "sum by (floe_product_name, floe_asset_key, floe_status) (increase(floe_asset_materializations_total[5m]))",
-              "legendFormat": "{{ "{{floe_product_name}}" }} / {{ "{{floe_asset_key}}" }}",
+              "expr": "up{job=\"floe-otel-collector\"}",
+              "legendFormat": "otel collector",
               "refId": "A"
             }
           ],
           "datasource": {
             "type": "prometheus",
-            "uid": "{{ .Values.observability.grafana.datasourceUid | default "prometheus" }}"
+            "uid": "{{ $prometheusDatasourceUid }}"
           },
           "gridPos": {
             "x": 0,
@@ -61,18 +77,18 @@ data:
         },
         {
           "id": 2,
-          "type": "timeseries",
-          "title": "Asset Failures",
+          "type": "stat",
+          "title": "Prometheus Target",
           "targets": [
             {
-              "expr": "sum by (floe_product_name, floe_asset_key, floe_status) (increase(floe_asset_failures_total[5m]))",
-              "legendFormat": "{{ "{{floe_product_name}}" }} / {{ "{{floe_asset_key}}" }}",
+              "expr": "up{job=\"floe-prometheus\"}",
+              "legendFormat": "prometheus",
               "refId": "A"
             }
           ],
           "datasource": {
             "type": "prometheus",
-            "uid": "{{ .Values.observability.grafana.datasourceUid | default "prometheus" }}"
+            "uid": "{{ $prometheusDatasourceUid }}"
           },
           "gridPos": {
             "x": 12,
@@ -84,17 +100,17 @@ data:
         {
           "id": 3,
           "type": "timeseries",
-          "title": "Marquez Lineage Events",
+          "title": "Customer 360 Materializations",
           "targets": [
             {
-              "expr": "sum by (lineage_status, lineage_event_type) (increase(floe_lineage_marquez_event_sends_total[5m]))",
-              "legendFormat": "{{ "{{lineage_status}}" }} / {{ "{{lineage_event_type}}" }}",
+              "expr": "sum by (floe_stage, floe_status, floe_plugin_name) (increase(floe_asset_materializations_total{floe_product_name=\"customer-360\",floe_status=\"success\"}[15m]))",
+              "legendFormat": "{{ "{{floe_stage}}" }} / {{ "{{floe_plugin_name}}" }}",
               "refId": "A"
             }
           ],
           "datasource": {
             "type": "prometheus",
-            "uid": "{{ .Values.observability.grafana.datasourceUid | default "prometheus" }}"
+            "uid": "{{ $prometheusDatasourceUid }}"
           },
           "gridPos": {
             "x": 0,
@@ -109,13 +125,13 @@ data:
           "title": "Floe Logs",
           "targets": [
             {
-              "expr": "{service_namespace=~\".+\"}",
+              "expr": "{service_name=~\".+\"} |= \"customer-360\"",
               "refId": "A"
             }
           ],
           "datasource": {
             "type": "loki",
-            "uid": "loki"
+            "uid": "{{ $lokiDatasourceUid }}"
           },
           "gridPos": {
             "x": 12,
@@ -127,6 +143,7 @@ data:
       ]
     }
   {{- end }}
+{{- end }}
 {{- if or $hasCustomGrafanaDatasources .Values.prometheus.enabled .Values.loki.enabled .Values.jaeger.enabled }}
 ---
 apiVersion: v1
@@ -154,7 +171,7 @@ data:
         isDefault: true
         name: Prometheus
         type: prometheus
-        uid: {{ .Values.observability.grafana.datasourceUid | default "prometheus" }}
+        uid: {{ $prometheusDatasourceUid }}
         url: http://{{ include "floe-platform.prometheus.fullname" . }}:{{ .Values.prometheus.service.port | default 9090 }}
       {{- end }}
       {{- if .Values.jaeger.enabled }}
@@ -162,7 +179,7 @@ data:
         editable: true
         name: Jaeger
         type: jaeger
-        uid: jaeger
+        uid: {{ $jaegerDatasourceUid }}
         url: http://{{ include "floe-platform.jaeger.queryName" . }}:16686
       {{- end }}
       {{- if .Values.loki.enabled }}
@@ -170,7 +187,7 @@ data:
         editable: true
         name: Loki
         type: loki
-        uid: loki
+        uid: {{ $lokiDatasourceUid }}
         url: http://{{ include "floe-platform.loki.fullname" . }}:{{ .Values.loki.service.port | default 3100 }}
       {{- end }}
       {{- end }}

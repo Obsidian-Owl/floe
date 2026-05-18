@@ -1,11 +1,11 @@
 {
   "uid": "floe-pipeline-metrics",
-  "title": "Floe Pipeline Metrics",
-  "tags": ["floe", "dagster", "pipeline"],
+  "title": "Floe Alpha Runtime Metrics",
+  "tags": ["floe", "alpha", "runtime", "metrics"],
   "timezone": "browser",
   "schemaVersion": 38,
   "version": 1,
-  "refresh": "30s",
+  "refresh": "{{ .GrafanaRefreshInterval }}",
   "time": {
     "from": "now-1h",
     "to": "now"
@@ -14,246 +14,144 @@
   "panels": [
     {
       "id": 1,
-      "type": "graph",
-      "title": "Pipeline Duration",
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 12,
-        "h": 8
-      },
+      "type": "timeseries",
+      "title": "Asset Materializations by Product",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
       "targets": [
         {
-          "expr": "rate(dagster_run_duration_seconds_sum[5m])",
-          "legendFormat": "{{pipeline_name}}",
+          "expr": "sum by (floe_product_name, floe_stage, floe_status) (increase(floe_asset_materializations_total[15m]))",
           "refId": "A"
         }
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "color": {
-            "mode": "palette-classic"
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": ["mean", "lastNotNull"]
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
+        "uid": "{{ .PrometheusDatasourceUid }}"
       }
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "Total Pipeline Runs",
-      "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 6,
-        "h": 4
-      },
+      "title": "Customer 360 Successful Materializations",
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 8},
       "targets": [
         {
-          "expr": "sum(increase(dagster_run_count_total[1h]))",
+          "expr": "sum(increase(floe_asset_materializations_total{floe_product_name=\"customer-360\",floe_status=\"success\"}[1h]))",
+          "legendFormat": "customer-360",
           "refId": "A"
         }
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "{{ .PrometheusDatasourceUid }}"
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "value": 0,
-                "color": "green"
-              }
-            ]
-          }
+          "unit": "short"
         }
       }
     },
     {
       "id": 3,
-      "type": "gauge",
-      "title": "Success Rate (%)",
-      "gridPos": {
-        "x": 18,
-        "y": 0,
-        "w": 6,
-        "h": 8
-      },
+      "type": "stat",
+      "title": "Asset Failures",
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 8},
       "targets": [
         {
-          "expr": "100 * (sum(increase(dagster_run_success_total[1h])) / sum(increase(dagster_run_count_total[1h])))",
+          "expr": "sum(increase(floe_asset_failures_total[1h]))",
+          "legendFormat": "failures",
           "refId": "A"
         }
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "{{ .PrometheusDatasourceUid }}"
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "value": 0,
-                "color": "red"
-              },
-              {
-                "value": 80,
-                "color": "yellow"
-              },
-              {
-                "value": 95,
-                "color": "green"
-              }
-            ]
-          }
+          "unit": "short"
         }
       }
     },
     {
       "id": 4,
-      "type": "stat",
-      "title": "Failed Runs (Last Hour)",
-      "gridPos": {
-        "x": 12,
-        "y": 4,
-        "w": 6,
-        "h": 4
-      },
+      "type": "timeseries",
+      "title": "Materializations by Plugin",
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
       "targets": [
         {
-          "expr": "sum(increase(dagster_run_failure_total[1h]))",
+          "expr": "sum by (floe_plugin_type, floe_plugin_name, floe_status) (increase(floe_asset_materializations_total[15m]))",
           "refId": "A"
         }
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "value": 0,
-                "color": "green"
-              },
-              {
-                "value": 1,
-                "color": "yellow"
-              },
-              {
-                "value": 5,
-                "color": "red"
-              }
-            ]
-          }
-        }
+        "uid": "{{ .PrometheusDatasourceUid }}"
       }
     },
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Models Processed Per Run",
-      "gridPos": {
-        "x": 0,
-        "y": 8,
-        "w": 12,
-        "h": 8
-      },
+      "title": "Customer 360 Runtime Stages",
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
       "targets": [
         {
-          "expr": "dagster_asset_materialization_count",
-          "legendFormat": "{{asset_key}}",
+          "expr": "sum by (floe_stage, floe_plugin_name) (increase(floe_asset_materializations_total{floe_product_name=\"customer-360\",floe_status=\"success\"}[15m]))",
           "refId": "A"
         }
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "palette-classic"
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": ["sum"]
-        }
+        "uid": "{{ .PrometheusDatasourceUid }}"
       }
     },
     {
       "id": 6,
-      "type": "bargauge",
-      "title": "Run Status Distribution",
-      "gridPos": {
-        "x": 12,
-        "y": 8,
-        "w": 12,
-        "h": 8
-      },
+      "type": "piechart",
+      "title": "Materialization Status Distribution",
+      "gridPos": {"x": 0, "y": 16, "w": 8, "h": 8},
       "targets": [
         {
-          "expr": "sum by(status) (increase(dagster_run_count_total[1h]))",
-          "legendFormat": "{{status}}",
+          "expr": "sum by (floe_status) (increase(floe_asset_materializations_total[1h]))",
           "refId": "A"
         }
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "palette-classic"
-          }
+        "uid": "{{ .PrometheusDatasourceUid }}"
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "OTel Collector Scrape",
+      "gridPos": {"x": 8, "y": 16, "w": 8, "h": 8},
+      "targets": [
+        {
+          "expr": "up{job=\"floe-otel-collector\"}",
+          "legendFormat": "otel collector",
+          "refId": "A"
         }
-      },
-      "options": {
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "showUnfilled": true
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "{{ .PrometheusDatasourceUid }}"
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Prometheus Scrape",
+      "gridPos": {"x": 16, "y": 16, "w": 8, "h": 8},
+      "targets": [
+        {
+          "expr": "up{job=\"floe-prometheus\"}",
+          "legendFormat": "prometheus",
+          "refId": "A"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "{{ .PrometheusDatasourceUid }}"
       }
     }
   ]

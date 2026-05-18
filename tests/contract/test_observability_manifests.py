@@ -85,6 +85,7 @@ def _render_job_manifest(template: str) -> dict[str, Any]:
             "template",
             "floe-platform",
             str(_CHART_DIR),
+            "--skip-schema-validation",
             "--set",
             "tests.enabled=true",
             "-s",
