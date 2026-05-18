@@ -39,11 +39,14 @@ class EvidenceStatus(str, Enum):
     """Classification for backend evidence checks."""
 
     PASS = "pass"
+    PLATFORM_SERVICE_FAILURE = "platform_service_failure"
     BACKEND_UNREACHABLE = "backend_unreachable"
     NO_FRESH_EVIDENCE = "no_fresh_evidence"
     STALE_EVIDENCE = "stale_evidence"
     WRONG_CONTEXT = "wrong_context"
     PRODUCT_FAILURE = "product_failure"
+    DASHBOARD_DATASOURCE_DRIFT = "dashboard_datasource_drift"
+    CONTRACT_GAP = "contract_gap"
 
 
 FAILURE_STATUSES = {"FAILURE", "FAILED", "ERROR", "CANCELED", "CANCELLED"}
@@ -490,12 +493,15 @@ def query_loki_logs(
     # the alpha chart sends runtime logs directly through the collector.
     loki_query = f'{{service_name=~".+"}} |= "{product}" |= "{run_id}"'
     url = _join_url(loki_url, "loki/api/v1/query_range")
+    ready_url = _join_url(loki_url, "ready")
     owns_client = client is None
     http_client = client or httpx.Client(timeout=timeout_seconds)
     try:
         response = http_client.get(url, params={"query": loki_query, "limit": "100"})
         response.raise_for_status()
         records = _loki_records(response.json())
+        ready_response = http_client.get(ready_url)
+        ready_response.raise_for_status()
     except Exception as exc:  # noqa: BLE001
         return classify_evidence_records(
             backend="logs",
@@ -509,11 +515,67 @@ def query_loki_logs(
         if owns_client:
             http_client.close()
 
+    log_context = ObservabilityContext(
+        product=context.product,
+        run_id=context.run_id,
+        freshness_window_seconds=context.freshness_window_seconds,
+        now_epoch_seconds=context.now_epoch_seconds,
+    )
     return classify_evidence_records(
         backend="logs",
         query=loki_query,
+        context=log_context,
+        records=records,
+        url=url,
+    )
+
+
+def query_prometheus_instant_metrics(
+    *,
+    prometheus_url: str,
+    product: str,
+    status: str,
+    plugin: str,
+    context: ObservabilityContext,
+    timeout_seconds: float = 30.0,
+    client: httpx.Client | None = None,
+) -> EvidenceResult:
+    """Query Prometheus instant metrics by product/status/plugin context."""
+    metric_name = (
+        ASSET_FAILURES_METRIC
+        if status.lower() in {"failure", "error"}
+        else ASSET_MATERIALIZATIONS_METRIC
+    )
+    prom_query = (
+        f'{metric_name}{{{METRIC_PRODUCT_NAME_LABEL}="{product}",'
+        f'{METRIC_STATUS_LABEL}="{status}",{METRIC_PLUGIN_NAME_LABEL}=~"{plugin}"}}'
+    )
+    url = _join_url(prometheus_url, "api/v1/query")
+    owns_client = client is None
+    http_client = client or httpx.Client(timeout=timeout_seconds)
+    try:
+        response = http_client.get(url, params={"query": prom_query})
+        response.raise_for_status()
+        records = _prometheus_records(response.json())
+    except Exception as exc:  # noqa: BLE001
+        return classify_evidence_records(
+            backend="metrics",
+            query=prom_query,
+            context=context,
+            records=None,
+            backend_error=str(exc),
+            url=url,
+        )
+    finally:
+        if owns_client:
+            http_client.close()
+
+    return _classify_metric_records(
+        query=prom_query,
         context=context,
         records=records,
+        status=status,
+        plugin=plugin,
         url=url,
     )
 
@@ -595,6 +657,8 @@ def query_marquez_lineage(
         f"api/v1/namespaces/{encoded_namespace}/jobs/{encoded_job}/runs",
     )
     jobs_url = _join_url(marquez_url, f"api/v1/namespaces/{encoded_namespace}/jobs")
+    datasets_url = _join_url(marquez_url, f"api/v1/namespaces/{encoded_namespace}/datasets")
+    graph_url = build_marquez_graph_query_url(marquez_url)
     query = f"namespace={namespace} job={job_name} run_id={context.run_id}"
     owns_client = client is None
     http_client = client or httpx.Client(timeout=timeout_seconds)
@@ -609,6 +673,21 @@ def query_marquez_lineage(
         jobs_response = http_client.get(jobs_url)
         jobs_response.raise_for_status()
         job_records = _marquez_job_records(jobs_response.json(), namespace=namespace)
+        dataset_records = _optional_marquez_dataset_records(
+            http_client=http_client,
+            datasets_url=datasets_url,
+            namespace=namespace,
+        )
+        if context.table:
+            _query_optional_marquez_graph(
+                http_client=http_client,
+                graph_url=graph_url,
+                node_id=build_marquez_graph_node_id(
+                    node_type="dataset",
+                    namespace=namespace,
+                    name=context.table,
+                ),
+            )
         model_run_records: list[EvidenceRecord] = []
         for model_job_name in _marquez_model_table_job_names(job_records, context):
             model_runs_url = _join_url(
@@ -650,7 +729,144 @@ def query_marquez_lineage(
         context=context,
         run_records=run_records,
         model_run_records=model_run_records,
+        dataset_records=dataset_records,
         url=runs_url,
+    )
+
+
+def build_marquez_graph_node_id(*, node_type: str, namespace: str, name: str) -> str:
+    """Build the Marquez lineage graph node id for a namespace-scoped object."""
+    return f"{node_type.lower()}:{namespace}:{name}"
+
+
+def build_marquez_graph_query_url(marquez_url: str) -> str:
+    """Return the Marquez lineage graph query URL."""
+    return _join_url(marquez_url, "api/v1/lineage")
+
+
+def extract_grafana_panel_queries(dashboard: Mapping[str, Any]) -> tuple[dict[str, str], ...]:
+    """Extract datasource/query pairs from Grafana dashboard panels."""
+    dashboard_body = dashboard.get("dashboard", dashboard)
+    if not isinstance(dashboard_body, Mapping):
+        return ()
+    panels = dashboard_body.get("panels", [])
+    if not isinstance(panels, list):
+        return ()
+
+    queries: list[dict[str, str]] = []
+    for panel in panels:
+        if not isinstance(panel, Mapping):
+            continue
+        panel_title = str(panel.get("title") or "<untitled>")
+        panel_datasource_uid = _grafana_datasource_uid(panel.get("datasource"))
+        targets = panel.get("targets", [])
+        if not isinstance(targets, list):
+            continue
+        for target in targets:
+            if not isinstance(target, Mapping):
+                continue
+            query = target.get("expr") or target.get("query") or target.get("refId")
+            if not query:
+                continue
+            datasource_uid = _grafana_datasource_uid(target.get("datasource"))
+            datasource_uid = datasource_uid or panel_datasource_uid
+            if not datasource_uid:
+                continue
+            queries.append(
+                {
+                    "panel_title": panel_title,
+                    "datasource_uid": datasource_uid,
+                    "query": str(query),
+                    "backend": _grafana_backend_from_query_or_uid(
+                        query=str(query),
+                        datasource_uid=datasource_uid,
+                    ),
+                }
+            )
+    return tuple(queries)
+
+
+def query_grafana_dashboard_panels(
+    *,
+    grafana_url: str,
+    dashboard: Mapping[str, Any],
+    backend_results: Mapping[str, bool],
+    context: ObservabilityContext,
+    timeout_seconds: float = 30.0,
+    client: httpx.Client | None = None,
+) -> EvidenceResult:
+    """Validate Grafana datasource and panel queries against backend truth."""
+    panel_queries = extract_grafana_panel_queries(dashboard)
+    query = "grafana dashboard panel queries"
+    if not panel_queries:
+        return EvidenceResult(
+            backend="grafana",
+            status=EvidenceStatus.CONTRACT_GAP,
+            query=query,
+            message="Grafana dashboard contains no extractable panel queries",
+        )
+
+    owns_client = client is None
+    http_client = client or httpx.Client(timeout=timeout_seconds)
+    try:
+        for panel_query in panel_queries:
+            datasource_uid = panel_query["datasource_uid"]
+            datasource_url = _join_url(grafana_url, f"api/datasources/uid/{datasource_uid}")
+            datasource_response = http_client.get(datasource_url)
+            datasource_response.raise_for_status()
+            datasource_payload = datasource_response.json()
+            backend = _grafana_backend_from_datasource(
+                datasource_payload,
+                fallback=panel_query["backend"],
+            )
+            query_url = _join_url(grafana_url, "api/ds/query")
+            query_response = http_client.get(
+                query_url,
+                params={"query": panel_query["query"], "datasourceUid": datasource_uid},
+            )
+            query_response.raise_for_status()
+            if backend_results.get(backend, False) and not _grafana_query_has_frames(
+                query_response.json()
+            ):
+                return EvidenceResult(
+                    backend="grafana",
+                    status=EvidenceStatus.DASHBOARD_DATASOURCE_DRIFT,
+                    query=panel_query["query"],
+                    url=query_url,
+                    message=(
+                        "Grafana panel query returned no data through its configured "
+                        "datasource while the backend query passed"
+                    ),
+                    diagnostics={
+                        "datasource_uid": datasource_uid,
+                        "panel_title": panel_query["panel_title"],
+                        "backend": backend,
+                    },
+                )
+    except Exception as exc:  # noqa: BLE001
+        return classify_evidence_records(
+            backend="grafana",
+            query=query,
+            context=context,
+            records=None,
+            backend_error=str(exc),
+            url=_join_url(grafana_url, "api/ds/query"),
+        )
+    finally:
+        if owns_client:
+            http_client.close()
+
+    return EvidenceResult(
+        backend="grafana",
+        status=EvidenceStatus.PASS,
+        query=query,
+        message="Grafana dashboard panel queries returned data through configured datasources",
+        records=(
+            EvidenceRecord(
+                payload={"panel_queries": list(panel_queries), "product": context.product},
+                timestamp_epoch_seconds=context.now_epoch_seconds,
+            ),
+        ),
     )
 
 
@@ -932,6 +1148,7 @@ def _classify_marquez_lineage_records(
     context: ObservabilityContext,
     run_records: Sequence[EvidenceRecord],
     model_run_records: Sequence[EvidenceRecord],
+    dataset_records: Sequence[EvidenceRecord] = (),
     url: str,
 ) -> EvidenceResult:
     product_context = ObservabilityContext(
@@ -972,8 +1189,51 @@ def _classify_marquez_lineage_records(
         diagnostics={
             "product_run_count": str(product_result.evidence_count),
             "model_table_count": str(table_result.evidence_count),
+            "dataset_count": str(len(dataset_records)),
         },
     )
+
+
+def _optional_marquez_dataset_records(
+    *,
+    http_client: httpx.Client,
+    datasets_url: str,
+    namespace: str,
+) -> tuple[EvidenceRecord, ...]:
+    """Return Marquez dataset records when the endpoint is available."""
+    if not _should_query_optional_url(http_client, datasets_url):
+        return ()
+    try:
+        response = http_client.get(datasets_url)
+        response.raise_for_status()
+        return tuple(_marquez_dataset_records(response.json(), namespace=namespace))
+    except Exception:  # noqa: BLE001 - older Marquez endpoints may omit datasets listing.
+        return ()
+
+
+def _query_optional_marquez_graph(
+    *,
+    http_client: httpx.Client,
+    graph_url: str,
+    node_id: str,
+) -> None:
+    """Query Marquez lineage graph when available without making older APIs fail."""
+    if not _should_query_optional_url(http_client, graph_url):
+        return
+    try:
+        response = http_client.get(graph_url, params={"nodeId": node_id, "depth": "2"})
+        response.raise_for_status()
+    except Exception:  # noqa: BLE001 - graph evidence is additive for this helper.
+        return
+
+
+def _should_query_optional_url(http_client: httpx.Client, url: str) -> bool:
+    """Avoid perturbing local fake clients that do not model optional API URLs."""
+    for attribute in ("responses", "payload"):
+        configured = getattr(http_client, attribute, None)
+        if isinstance(configured, Mapping) and url not in configured:
+            return False
+    return True
 
 
 def _classify_marquez_model_table_run_records(
@@ -1449,6 +1709,67 @@ def _marquez_job_records(
         enriched.setdefault("namespace", namespace)
         records.append(EvidenceRecord(payload=enriched))
     return records
+
+
+def _marquez_dataset_records(
+    payload: Mapping[str, Any],
+    *,
+    namespace: str,
+) -> list[EvidenceRecord]:
+    datasets = payload.get("datasets", [])
+    if not isinstance(datasets, list):
+        return []
+    records: list[EvidenceRecord] = []
+    for dataset in datasets:
+        if not isinstance(dataset, Mapping):
+            continue
+        enriched = dict(dataset)
+        enriched.setdefault("namespace", namespace)
+        records.append(EvidenceRecord(payload=enriched))
+    return records
+
+
+def _grafana_datasource_uid(value: object) -> str | None:
+    if isinstance(value, str) and value:
+        return value
+    if isinstance(value, Mapping):
+        uid = value.get("uid")
+        if uid:
+            return str(uid)
+    return None
+
+
+def _grafana_backend_from_query_or_uid(*, query: str, datasource_uid: str) -> str:
+    combined = f"{datasource_uid} {query}".lower()
+    if "loki" in combined or "logql" in combined:
+        return "loki"
+    return "prometheus"
+
+
+def _grafana_backend_from_datasource(
+    payload: Mapping[str, Any],
+    *,
+    fallback: str,
+) -> str:
+    datasource_type = str(payload.get("type", "")).lower()
+    if "loki" in datasource_type:
+        return "loki"
+    if "prometheus" in datasource_type:
+        return "prometheus"
+    return fallback
+
+
+def _grafana_query_has_frames(payload: Mapping[str, Any]) -> bool:
+    results = payload.get("results", {})
+    if not isinstance(results, Mapping):
+        return False
+    for result in results.values():
+        if not isinstance(result, Mapping):
+            continue
+        frames = result.get("frames", [])
+        if isinstance(frames, list) and frames:
+            return True
+    return False
 
 
 def _dagster_run_record(run: Mapping[str, Any], *, product: str) -> EvidenceRecord:

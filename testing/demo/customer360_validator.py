@@ -7,6 +7,7 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -20,12 +21,31 @@ DEFAULT_VALIDATION_MANIFEST = Path("demo/customer-360/validation.yaml")
 EXPECTED_EVIDENCE_KEYS = (
     "platform.ready",
     "dagster.customer_360_run",
+    "run_control.namespace",
+    "run_control.runtime_context",
+    "run_control.dagster.status",
+    "run_control.dagster.job_name",
+    "run_control.dagster.api_reachable",
     "storage.customer_360_outputs",
+    "storage.iceberg.customer_360_outputs",
     "lineage.marquez_customer_360",
     "tracing.jaeger_customer_360",
     "business.customer_count",
     "business.total_lifetime_value",
 )
+
+
+class FailureClass(str, Enum):
+    """Alpha operability failure classes emitted by the validator."""
+
+    PRODUCT_FAILURE = "product_failure"
+    PLATFORM_SERVICE_FAILURE = "platform_service_failure"
+    BACKEND_UNREACHABLE = "backend_unreachable"
+    NO_FRESH_EVIDENCE = "no_fresh_evidence"
+    WRONG_CONTEXT = "wrong_context"
+    STALE_EVIDENCE = "stale_evidence"
+    DASHBOARD_DATASOURCE_DRIFT = "dashboard_datasource_drift"
+    CONTRACT_GAP = "contract_gap"
 
 
 def default_command_runner(
@@ -178,6 +198,11 @@ class Customer360Validator:
     def validate(self) -> ValidationResult:
         """Validate service health and Customer 360 evidence."""
         evidence = dict.fromkeys(EXPECTED_EVIDENCE_KEYS, "unknown")
+        evidence["run_control.namespace"] = self._config.namespace
+        evidence["run_control.runtime_context"] = _runtime_context_for_namespace(
+            self._config.namespace
+        )
+        evidence["run_control.dagster.job_name"] = self._config.dagster_expected_text
         failures: list[str] = []
 
         self._check_platform(evidence, failures)
@@ -218,7 +243,12 @@ class Customer360Validator:
         )
         if not expected_services:
             evidence["platform.ready"] = "false"
-            failures.append("Platform expected services must contain at least one service fragment")
+            failures.append(
+                _classified_failure(
+                    FailureClass.PLATFORM_SERVICE_FAILURE,
+                    "Platform expected services must contain at least one service fragment",
+                )
+            )
             return
 
         command = ["kubectl", "get", "pods", "-n", self._config.namespace, "-o", "json"]
@@ -226,7 +256,12 @@ class Customer360Validator:
             pods = json.loads(self._run(command))
         except Exception as exc:  # noqa: BLE001 - validation should report all failures.
             evidence["platform.ready"] = "false"
-            failures.append(f"Unable to inspect Kubernetes pods: {exc}")
+            failures.append(
+                _classified_failure(
+                    FailureClass.BACKEND_UNREACHABLE,
+                    f"Unable to inspect Kubernetes pods: {exc}",
+                )
+            )
             return
 
         ready_pods = [
@@ -248,27 +283,46 @@ class Customer360Validator:
         evidence["platform.ready"] = str(ready).lower()
         if missing_services:
             failures.append(
-                f"Expected platform services are not ready in namespace {self._config.namespace}: "
-                f"{', '.join(missing_services)}"
+                _classified_failure(
+                    FailureClass.PLATFORM_SERVICE_FAILURE,
+                    (
+                        "Expected platform services are not ready in namespace "
+                        f"{self._config.namespace}: {', '.join(missing_services)}"
+                    ),
+                )
             )
 
     def _check_dagster(self, evidence: dict[str, str], failures: list[str]) -> None:
         url = _join_url(self._config.dagster_url, "server_info")
         try:
             self._run(["curl", "-fsS", url])
+            evidence["run_control.dagster.api_reachable"] = "true"
         except Exception as exc:  # noqa: BLE001
-            failures.append(f"Dagster API is not reachable: {exc}")
+            evidence["run_control.dagster.api_reachable"] = "false"
+            failures.append(
+                _classified_failure(
+                    FailureClass.BACKEND_UNREACHABLE,
+                    f"Dagster API is not reachable: {exc}",
+                )
+            )
 
         self._check_expected_text_command(
             evidence=evidence,
             failures=failures,
             key="dagster.customer_360_run",
+            alias_key="run_control.dagster.status",
+            alias_pass_value="pass",
+            alias_fail_value="fail",
             command=self._config.dagster_run_check_command,
             expected_text=self._config.dagster_expected_text,
             missing_message="Customer 360 Dagster run check is not configured",
             failed_message="Customer 360 Dagster run check failed",
             not_found_message="Customer 360 Dagster run evidence was not found",
             invalid_expected_message="Customer 360 Dagster expected text must be non-empty",
+            missing_failure_class=FailureClass.CONTRACT_GAP,
+            failed_failure_class=FailureClass.PRODUCT_FAILURE,
+            not_found_failure_class=FailureClass.NO_FRESH_EVIDENCE,
+            invalid_failure_class=FailureClass.CONTRACT_GAP,
         )
 
     def _check_marquez(self, evidence: dict[str, str], failures: list[str]) -> None:
@@ -276,7 +330,12 @@ class Customer360Validator:
         try:
             json.loads(self._run(["curl", "-fsS", url]))
         except Exception as exc:  # noqa: BLE001
-            failures.append(f"Unable to inspect Marquez namespaces: {exc}")
+            failures.append(
+                _classified_failure(
+                    FailureClass.BACKEND_UNREACHABLE,
+                    f"Unable to inspect Marquez namespaces: {exc}",
+                )
+            )
 
         self._check_expected_text_command(
             evidence=evidence,
@@ -288,6 +347,10 @@ class Customer360Validator:
             failed_message="Customer 360 lineage check failed",
             not_found_message="Customer 360 lineage evidence was not found",
             invalid_expected_message="Customer 360 lineage expected text must be non-empty",
+            missing_failure_class=FailureClass.CONTRACT_GAP,
+            failed_failure_class=FailureClass.PRODUCT_FAILURE,
+            not_found_failure_class=FailureClass.NO_FRESH_EVIDENCE,
+            invalid_failure_class=FailureClass.CONTRACT_GAP,
         )
 
     def _check_jaeger(self, evidence: dict[str, str], failures: list[str]) -> None:
@@ -295,7 +358,12 @@ class Customer360Validator:
         try:
             json.loads(self._run(["curl", "-fsS", url]))
         except Exception as exc:  # noqa: BLE001
-            failures.append(f"Unable to inspect Jaeger services: {exc}")
+            failures.append(
+                _classified_failure(
+                    FailureClass.BACKEND_UNREACHABLE,
+                    f"Unable to inspect Jaeger services: {exc}",
+                )
+            )
 
         self._check_expected_text_command(
             evidence=evidence,
@@ -307,31 +375,59 @@ class Customer360Validator:
             failed_message="Customer 360 tracing check failed",
             not_found_message="Customer 360 tracing evidence was not found",
             invalid_expected_message="Customer 360 tracing expected text must be non-empty",
+            missing_failure_class=FailureClass.CONTRACT_GAP,
+            failed_failure_class=FailureClass.PRODUCT_FAILURE,
+            not_found_failure_class=FailureClass.NO_FRESH_EVIDENCE,
+            invalid_failure_class=FailureClass.CONTRACT_GAP,
         )
 
     def _check_storage(self, evidence: dict[str, str], failures: list[str]) -> None:
         command = self._config.storage_check_command
         if command is None:
             evidence["storage.customer_360_outputs"] = "unknown"
-            failures.append("Customer 360 storage outputs check is not configured")
+            evidence["storage.iceberg.customer_360_outputs"] = "unknown"
+            failures.append(
+                _classified_failure(
+                    FailureClass.CONTRACT_GAP,
+                    "Customer 360 storage outputs check is not configured",
+                )
+            )
             return
         expected_text = self._config.storage_expected_text.strip()
         if not expected_text:
             evidence["storage.customer_360_outputs"] = "false"
-            failures.append("Customer 360 storage expected text must be non-empty")
+            evidence["storage.iceberg.customer_360_outputs"] = "false"
+            failures.append(
+                _classified_failure(
+                    FailureClass.CONTRACT_GAP,
+                    "Customer 360 storage expected text must be non-empty",
+                )
+            )
             return
 
         try:
             output = self._run(command)
         except Exception as exc:  # noqa: BLE001
             evidence["storage.customer_360_outputs"] = "false"
-            failures.append(f"Customer 360 storage outputs check failed: {exc}")
+            evidence["storage.iceberg.customer_360_outputs"] = "false"
+            failures.append(
+                _classified_failure(
+                    FailureClass.PRODUCT_FAILURE,
+                    f"Customer 360 storage outputs check failed: {exc}",
+                )
+            )
             return
 
         found = expected_text in output
         evidence["storage.customer_360_outputs"] = str(found).lower()
+        evidence["storage.iceberg.customer_360_outputs"] = str(found).lower()
         if not found:
-            failures.append("Customer 360 storage outputs were not found")
+            failures.append(
+                _classified_failure(
+                    FailureClass.PRODUCT_FAILURE,
+                    "Customer 360 storage outputs were not found",
+                )
+            )
 
     def _check_business_metric(
         self,
@@ -346,7 +442,7 @@ class Customer360Validator:
     ) -> None:
         if command is None:
             evidence[key] = "unknown"
-            failures.append(missing_message)
+            failures.append(_classified_failure(FailureClass.CONTRACT_GAP, missing_message))
             return
         metric_label = empty_message.removesuffix(" returned no value")
 
@@ -354,46 +450,86 @@ class Customer360Validator:
             output = self._run(command).strip()
         except Exception as exc:  # noqa: BLE001
             evidence[key] = "false"
-            failures.append(f"{metric_label} command failed: {exc}")
+            failures.append(
+                _classified_failure(
+                    FailureClass.PRODUCT_FAILURE,
+                    f"{metric_label} command failed: {exc}",
+                )
+            )
             return
 
         if not output:
             evidence[key] = "false"
-            failures.append(empty_message)
+            failures.append(_classified_failure(FailureClass.PRODUCT_FAILURE, empty_message))
             return
         if integer:
             try:
                 value = Decimal(output)
             except InvalidOperation:
                 evidence[key] = "false"
-                failures.append(f"{metric_label} returned non-numeric value")
+                failures.append(
+                    _classified_failure(
+                        FailureClass.PRODUCT_FAILURE,
+                        f"{metric_label} returned non-numeric value",
+                    )
+                )
                 return
             if not value.is_finite():
                 evidence[key] = "false"
-                failures.append(f"{metric_label} returned non-numeric value")
+                failures.append(
+                    _classified_failure(
+                        FailureClass.PRODUCT_FAILURE,
+                        f"{metric_label} returned non-numeric value",
+                    )
+                )
                 return
             if value < 0:
                 evidence[key] = "false"
-                failures.append(f"{metric_label} returned negative value")
+                failures.append(
+                    _classified_failure(
+                        FailureClass.PRODUCT_FAILURE,
+                        f"{metric_label} returned negative value",
+                    )
+                )
                 return
             if value != value.to_integral_value():
                 evidence[key] = "false"
-                failures.append(f"{metric_label} returned non-integer value")
+                failures.append(
+                    _classified_failure(
+                        FailureClass.PRODUCT_FAILURE,
+                        f"{metric_label} returned non-integer value",
+                    )
+                )
                 return
         else:
             try:
                 value = Decimal(output)
             except InvalidOperation:
                 evidence[key] = "false"
-                failures.append(f"{metric_label} returned non-numeric value")
+                failures.append(
+                    _classified_failure(
+                        FailureClass.PRODUCT_FAILURE,
+                        f"{metric_label} returned non-numeric value",
+                    )
+                )
                 return
             if not value.is_finite():
                 evidence[key] = "false"
-                failures.append(f"{metric_label} returned non-numeric value")
+                failures.append(
+                    _classified_failure(
+                        FailureClass.PRODUCT_FAILURE,
+                        f"{metric_label} returned non-numeric value",
+                    )
+                )
                 return
             if value < 0:
                 evidence[key] = "false"
-                failures.append(f"{metric_label} returned negative value")
+                failures.append(
+                    _classified_failure(
+                        FailureClass.PRODUCT_FAILURE,
+                        f"{metric_label} returned negative value",
+                    )
+                )
                 return
 
         evidence[key] = output
@@ -410,28 +546,53 @@ class Customer360Validator:
         failed_message: str,
         not_found_message: str,
         invalid_expected_message: str,
+        missing_failure_class: FailureClass,
+        failed_failure_class: FailureClass,
+        not_found_failure_class: FailureClass,
+        invalid_failure_class: FailureClass,
+        alias_key: str | None = None,
+        alias_pass_value: str = "true",
+        alias_fail_value: str = "false",
     ) -> None:
         if command is None:
             evidence[key] = "unknown"
-            failures.append(missing_message)
+            if alias_key:
+                evidence[alias_key] = "unknown"
+            failures.append(_classified_failure(missing_failure_class, missing_message))
             return
         expected_text = expected_text.strip()
         if not expected_text:
             evidence[key] = "false"
-            failures.append(invalid_expected_message)
+            if alias_key:
+                evidence[alias_key] = alias_fail_value
+            failures.append(_classified_failure(invalid_failure_class, invalid_expected_message))
             return
 
         try:
             output = self._run(command)
         except Exception as exc:  # noqa: BLE001
             evidence[key] = "false"
-            failures.append(f"{failed_message}: {exc}")
+            if alias_key:
+                evidence[alias_key] = alias_fail_value
+            failures.append(_classified_failure(failed_failure_class, f"{failed_message}: {exc}"))
             return
 
         found = expected_text in output
         evidence[key] = str(found).lower()
+        if alias_key:
+            evidence[alias_key] = alias_pass_value if found else alias_fail_value
         if not found:
-            failures.append(not_found_message)
+            failures.append(_classified_failure(not_found_failure_class, not_found_message))
+
+
+def _classified_failure(failure_class: FailureClass, message: str) -> str:
+    """Format a validation failure with the alpha class prefix."""
+    return f"{failure_class.value}: {message}"
+
+
+def _runtime_context_for_namespace(namespace: str) -> str:
+    """Return the alpha runtime context represented by a demo namespace."""
+    return "devpod_flux" if namespace == "floe-test" else "local"
 
 
 def _join_url(base_url: str, path: str) -> str:
