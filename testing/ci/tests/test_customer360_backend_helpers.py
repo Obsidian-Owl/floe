@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any, cast
 
 import httpx
+import pytest
 
 from testing.ci.customer360_observability import (
     EvidenceStatus,
@@ -58,7 +59,15 @@ class _FakeClient:
             return response
         if response is not None:
             return _FakeResponse(response)
-        raise AssertionError(f"No fake response configured for {url}")
+        raise httpx.HTTPStatusError(
+            "not found",
+            request=httpx.Request("GET", url),
+            response=httpx.Response(404),
+        )
+
+    def close(self) -> None:
+        """Mirror httpx.Client.close for tests that exercise owned clients."""
+        return None
 
 
 def _context() -> ObservabilityContext:
@@ -71,6 +80,7 @@ def _context() -> ObservabilityContext:
     )
 
 
+@pytest.mark.requirement("alpha-demo")
 def test_evidence_status_covers_all_alpha_failure_classes() -> None:
     """Backend helpers can represent every alpha evidence class explicitly."""
     assert {status.value for status in EvidenceStatus} >= {
@@ -86,6 +96,7 @@ def test_evidence_status_covers_all_alpha_failure_classes() -> None:
     }
 
 
+@pytest.mark.requirement("alpha-demo")
 def test_marquez_helper_uses_api_endpoints_and_graph_node_helpers() -> None:
     """Marquez proof comes from namespace/job/run/dataset/lineage APIs, not root UI."""
     client = _FakeClient(
@@ -139,6 +150,7 @@ def test_marquez_helper_uses_api_endpoints_and_graph_node_helpers() -> None:
     assert node_id == "dataset:customer-360:mart_customer_360"
     assert build_marquez_graph_query_url("http://marquez") == "http://marquez/api/v1/lineage"
     assert result.status is EvidenceStatus.PASS
+    assert result.diagnostics["graph_count"] == "1"
     requested_urls = {url for url, _params in client.requests}
     assert "http://marquez/" not in requested_urls
     assert "http://marquez/api/v1/namespaces/customer-360/datasets" in requested_urls
@@ -148,6 +160,7 @@ def test_marquez_helper_uses_api_endpoints_and_graph_node_helpers() -> None:
     ) in client.requests
 
 
+@pytest.mark.requirement("alpha-demo")
 def test_loki_helper_checks_ready_and_query_range_without_root_ui() -> None:
     """Loki root 404 is irrelevant when /ready and query_range pass."""
     client = _FakeClient(
@@ -183,10 +196,44 @@ def test_loki_helper_checks_ready_and_query_range_without_root_ui() -> None:
     )
 
     assert result.status is EvidenceStatus.PASS
-    assert ("http://loki/ready", None) in client.requests
+    assert client.requests[0] == ("http://loki/ready", None)
     assert all(url != "http://loki/" for url, _params in client.requests)
 
 
+@pytest.mark.requirement("alpha-demo")
+def test_loki_helper_fails_fast_when_ready_endpoint_is_unavailable() -> None:
+    """Loki readiness failure is reported before running the range query."""
+    ready_url = "http://loki/ready"
+    client = _FakeClient(
+        {
+            ready_url: _FakeResponse(
+                "not ready\n",
+                status_code=503,
+                error=httpx.HTTPStatusError(
+                    "service unavailable",
+                    request=httpx.Request("GET", ready_url),
+                    response=httpx.Response(503),
+                ),
+            ),
+            "http://loki/loki/api/v1/query_range": {
+                "data": {"result": []},
+            },
+        }
+    )
+
+    result = query_loki_logs(
+        loki_url="http://loki",
+        product="customer-360",
+        run_id="run-123",
+        context=_context(),
+        client=cast(httpx.Client, client),
+    )
+
+    assert result.status is EvidenceStatus.BACKEND_UNREACHABLE
+    assert client.requests == [(ready_url, None)]
+
+
+@pytest.mark.requirement("alpha-demo")
 def test_prometheus_helpers_support_instant_and_range_queries() -> None:
     """Prometheus proof can be checked through instant or range query APIs."""
     instant_client = _FakeClient(
@@ -251,6 +298,37 @@ def test_prometheus_helpers_support_instant_and_range_queries() -> None:
     assert ranged.url == "http://prom/api/v1/query_range"
 
 
+@pytest.mark.requirement("alpha-demo")
+def test_prometheus_instant_helper_reports_backend_unreachable() -> None:
+    """Instant Prometheus query failures use the shared backend failure class."""
+    query_url = "http://prom/api/v1/query"
+    client = _FakeClient(
+        {
+            query_url: _FakeResponse(
+                {},
+                status_code=503,
+                error=httpx.HTTPStatusError(
+                    "service unavailable",
+                    request=httpx.Request("GET", query_url),
+                    response=httpx.Response(503),
+                ),
+            )
+        }
+    )
+
+    result = query_prometheus_instant_metrics(
+        prometheus_url="http://prom",
+        product="customer-360",
+        status="success",
+        plugin="dagster",
+        context=_context(),
+        client=cast(httpx.Client, client),
+    )
+
+    assert result.status is EvidenceStatus.BACKEND_UNREACHABLE
+
+
+@pytest.mark.requirement("alpha-demo")
 def test_grafana_panel_queries_classify_datasource_drift() -> None:
     """Empty panel results through Grafana are datasource drift when backend queries pass."""
     dashboard = {
@@ -302,3 +380,17 @@ def test_grafana_panel_queries_classify_datasource_drift() -> None:
     )
     assert result.status is EvidenceStatus.DASHBOARD_DATASOURCE_DRIFT
     assert result.diagnostics["datasource_uid"] == "grafana-prometheus"
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_grafana_panel_queries_report_contract_gap_when_no_queries_exist() -> None:
+    """Dashboards with no extractable panel queries are contract gaps."""
+    result = query_grafana_dashboard_panels(
+        grafana_url="http://grafana",
+        dashboard={"dashboard": {"panels": []}},
+        backend_results={"prometheus": True},
+        context=_context(),
+        client=cast(httpx.Client, _FakeClient({})),
+    )
+
+    assert result.status is EvidenceStatus.CONTRACT_GAP

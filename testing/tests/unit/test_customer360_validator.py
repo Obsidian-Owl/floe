@@ -55,11 +55,11 @@ def _healthy_runner() -> FakeRunner:
                     ]
                 }
             ),
-            ("curl", "-fsS", "http://localhost:3100/server_info"): "{}",
-            ("curl", "-fsS", "http://localhost:5100/api/v1/namespaces"): json.dumps(
+            ("curl", "-fsS", "--", "http://localhost:3100/server_info"): "{}",
+            ("curl", "-fsS", "--", "http://localhost:5100/api/v1/namespaces"): json.dumps(
                 {"namespaces": [{"name": "customer_360"}]}
             ),
-            ("curl", "-fsS", "http://localhost:16686/api/services"): json.dumps(
+            ("curl", "-fsS", "--", "http://localhost:16686/api/services"): json.dumps(
                 {"data": ["dagster"]}
             ),
         }
@@ -157,11 +157,13 @@ def test_customer360_validator_uses_configurable_namespace_and_urls() -> None:
                     ]
                 }
             ),
-            ("curl", "-fsS", "http://dagster.example/server_info"): "{}",
-            ("curl", "-fsS", "http://marquez.example/api/v1/namespaces"): json.dumps(
+            ("curl", "-fsS", "--", "http://dagster.example/server_info"): "{}",
+            ("curl", "-fsS", "--", "http://marquez.example/api/v1/namespaces"): json.dumps(
                 {"namespaces": [{"name": "customer-360"}]}
             ),
-            ("curl", "-fsS", "http://jaeger.example/api/services"): json.dumps({"data": ["floe"]}),
+            ("curl", "-fsS", "--", "http://jaeger.example/api/services"): json.dumps(
+                {"data": ["floe"]}
+            ),
         }
     )
 
@@ -169,9 +171,9 @@ def test_customer360_validator_uses_configurable_namespace_and_urls() -> None:
 
     assert runner.commands == [
         ("kubectl", "get", "pods", "-n", "custom-ns", "-o", "json"),
-        ("curl", "-fsS", "http://dagster.example/server_info"),
-        ("curl", "-fsS", "http://marquez.example/api/v1/namespaces"),
-        ("curl", "-fsS", "http://jaeger.example/api/services"),
+        ("curl", "-fsS", "--", "http://dagster.example/server_info"),
+        ("curl", "-fsS", "--", "http://marquez.example/api/v1/namespaces"),
+        ("curl", "-fsS", "--", "http://jaeger.example/api/services"),
     ]
 
 
@@ -183,11 +185,11 @@ def test_customer360_validator_requires_expected_platform_services() -> None:
             ("kubectl", "get", "pods", "-n", "floe-dev", "-o", "json"): json.dumps(
                 {"items": [_ready_pod("unrelated-worker")]}
             ),
-            ("curl", "-fsS", "http://localhost:3100/server_info"): "{}",
-            ("curl", "-fsS", "http://localhost:5100/api/v1/namespaces"): json.dumps(
+            ("curl", "-fsS", "--", "http://localhost:3100/server_info"): "{}",
+            ("curl", "-fsS", "--", "http://localhost:5100/api/v1/namespaces"): json.dumps(
                 {"namespaces": []}
             ),
-            ("curl", "-fsS", "http://localhost:16686/api/services"): json.dumps({"data": []}),
+            ("curl", "-fsS", "--", "http://localhost:16686/api/services"): json.dumps({"data": []}),
         }
     )
 

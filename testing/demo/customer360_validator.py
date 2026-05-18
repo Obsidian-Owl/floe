@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -17,6 +18,7 @@ CommandRunner = Callable[[list[str]], str]
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
 DEFAULT_PLATFORM_SERVICE_FRAGMENTS = ("dagster", "polaris", "minio", "jaeger", "marquez")
 DEFAULT_VALIDATION_MANIFEST = Path("demo/customer-360/validation.yaml")
+KUBERNETES_NAMESPACE_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$")
 
 EXPECTED_EVIDENCE_KEYS = (
     "platform.ready",
@@ -251,9 +253,23 @@ class Customer360Validator:
             )
             return
 
-        command = ["kubectl", "get", "pods", "-n", self._config.namespace, "-o", "json"]
+        namespace = _validate_kubernetes_namespace(self._config.namespace)
+        if namespace is None:
+            evidence["platform.ready"] = "false"
+            failures.append(
+                _classified_failure(
+                    FailureClass.PLATFORM_SERVICE_FAILURE,
+                    f"Invalid Kubernetes namespace: {self._config.namespace}",
+                )
+            )
+            return
+
+        command = ["kubectl", "get", "pods", "-n", namespace, "-o", "json"]
         try:
-            pods = json.loads(self._run(command))
+            pods = _json_mapping_from_command_output(
+                self._run(command),
+                context="kubectl pods response",
+            )
         except Exception as exc:  # noqa: BLE001 - validation should report all failures.
             evidence["platform.ready"] = "false"
             failures.append(
@@ -295,7 +311,7 @@ class Customer360Validator:
     def _check_dagster(self, evidence: dict[str, str], failures: list[str]) -> None:
         url = _join_url(self._config.dagster_url, "server_info")
         try:
-            self._run(["curl", "-fsS", url])
+            self._run(_curl_command(url))
             evidence["run_control.dagster.api_reachable"] = "true"
         except Exception as exc:  # noqa: BLE001
             evidence["run_control.dagster.api_reachable"] = "false"
@@ -328,7 +344,10 @@ class Customer360Validator:
     def _check_marquez(self, evidence: dict[str, str], failures: list[str]) -> None:
         url = _join_url(self._config.marquez_url, "api/v1/namespaces")
         try:
-            json.loads(self._run(["curl", "-fsS", url]))
+            _json_mapping_from_command_output(
+                self._run(_curl_command(url)),
+                context="Marquez namespaces response",
+            )
         except Exception as exc:  # noqa: BLE001
             failures.append(
                 _classified_failure(
@@ -356,7 +375,10 @@ class Customer360Validator:
     def _check_jaeger(self, evidence: dict[str, str], failures: list[str]) -> None:
         url = _join_url(self._config.jaeger_url, "api/services")
         try:
-            json.loads(self._run(["curl", "-fsS", url]))
+            _json_mapping_from_command_output(
+                self._run(_curl_command(url)),
+                context="Jaeger services response",
+            )
         except Exception as exc:  # noqa: BLE001
             failures.append(
                 _classified_failure(
@@ -592,7 +614,33 @@ def _classified_failure(failure_class: FailureClass, message: str) -> str:
 
 def _runtime_context_for_namespace(namespace: str) -> str:
     """Return the alpha runtime context represented by a demo namespace."""
+    # Alpha has two supported runtime contexts today. Treat any namespace
+    # outside the DevPod/Flux test namespace as the local validator context.
     return "devpod_flux" if namespace == "floe-test" else "local"
+
+
+def _validate_kubernetes_namespace(namespace: str) -> str | None:
+    """Return the namespace when it is a valid Kubernetes namespace."""
+    namespace = namespace.strip()
+    if KUBERNETES_NAMESPACE_PATTERN.fullmatch(namespace) is None:
+        return None
+    return namespace
+
+
+def _json_mapping_from_command_output(output: str, *, context: str) -> dict[str, Any]:
+    """Parse command JSON output and require a JSON object payload."""
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in {context}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Invalid {context}: expected JSON object")
+    return payload
+
+
+def _curl_command(url: str) -> list[str]:
+    """Return a curl argv list that stops option parsing before the URL."""
+    return ["curl", "-fsS", "--", url]
 
 
 def _join_url(base_url: str, path: str) -> str:

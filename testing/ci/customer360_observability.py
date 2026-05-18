@@ -497,11 +497,11 @@ def query_loki_logs(
     owns_client = client is None
     http_client = client or httpx.Client(timeout=timeout_seconds)
     try:
+        ready_response = http_client.get(ready_url)
+        ready_response.raise_for_status()
         response = http_client.get(url, params={"query": loki_query, "limit": "100"})
         response.raise_for_status()
         records = _loki_records(response.json())
-        ready_response = http_client.get(ready_url)
-        ready_response.raise_for_status()
     except Exception as exc:  # noqa: BLE001
         return classify_evidence_records(
             backend="logs",
@@ -515,6 +515,8 @@ def query_loki_logs(
         if owns_client:
             http_client.close()
 
+    # Loki log proof is run-scoped. Drop table from the shared context so a
+    # valid run-level log stream is not rejected for missing table text.
     log_context = ObservabilityContext(
         product=context.product,
         run_id=context.run_id,
@@ -678,8 +680,9 @@ def query_marquez_lineage(
             datasets_url=datasets_url,
             namespace=namespace,
         )
+        graph_records: tuple[EvidenceRecord, ...] = ()
         if context.table:
-            _query_optional_marquez_graph(
+            graph_records = _query_optional_marquez_graph(
                 http_client=http_client,
                 graph_url=graph_url,
                 node_id=build_marquez_graph_node_id(
@@ -730,6 +733,7 @@ def query_marquez_lineage(
         run_records=run_records,
         model_run_records=model_run_records,
         dataset_records=dataset_records,
+        graph_records=graph_records,
         url=runs_url,
     )
 
@@ -1149,6 +1153,7 @@ def _classify_marquez_lineage_records(
     run_records: Sequence[EvidenceRecord],
     model_run_records: Sequence[EvidenceRecord],
     dataset_records: Sequence[EvidenceRecord] = (),
+    graph_records: Sequence[EvidenceRecord] = (),
     url: str,
 ) -> EvidenceResult:
     product_context = ObservabilityContext(
@@ -1190,6 +1195,7 @@ def _classify_marquez_lineage_records(
             "product_run_count": str(product_result.evidence_count),
             "model_table_count": str(table_result.evidence_count),
             "dataset_count": str(len(dataset_records)),
+            "graph_count": str(len(graph_records)),
         },
     )
 
@@ -1201,8 +1207,6 @@ def _optional_marquez_dataset_records(
     namespace: str,
 ) -> tuple[EvidenceRecord, ...]:
     """Return Marquez dataset records when the endpoint is available."""
-    if not _should_query_optional_url(http_client, datasets_url):
-        return ()
     try:
         response = http_client.get(datasets_url)
         response.raise_for_status()
@@ -1216,24 +1220,14 @@ def _query_optional_marquez_graph(
     http_client: httpx.Client,
     graph_url: str,
     node_id: str,
-) -> None:
-    """Query Marquez lineage graph when available without making older APIs fail."""
-    if not _should_query_optional_url(http_client, graph_url):
-        return
+) -> tuple[EvidenceRecord, ...]:
+    """Return Marquez lineage graph records when the endpoint is available."""
     try:
         response = http_client.get(graph_url, params={"nodeId": node_id, "depth": "2"})
         response.raise_for_status()
+        return tuple(_marquez_graph_records(response.json(), node_id=node_id))
     except Exception:  # noqa: BLE001 - graph evidence is additive for this helper.
-        return
-
-
-def _should_query_optional_url(http_client: httpx.Client, url: str) -> bool:
-    """Avoid perturbing local fake clients that do not model optional API URLs."""
-    for attribute in ("responses", "payload"):
-        configured = getattr(http_client, attribute, None)
-        if isinstance(configured, Mapping) and url not in configured:
-            return False
-    return True
+        return ()
 
 
 def _classify_marquez_model_table_run_records(
@@ -1727,6 +1721,17 @@ def _marquez_dataset_records(
         enriched.setdefault("namespace", namespace)
         records.append(EvidenceRecord(payload=enriched))
     return records
+
+
+def _marquez_graph_records(
+    payload: Mapping[str, Any],
+    *,
+    node_id: str,
+) -> list[EvidenceRecord]:
+    """Convert a Marquez lineage graph response into evidence records."""
+    enriched = dict(payload)
+    enriched.setdefault("node_id", node_id)
+    return [EvidenceRecord(payload=enriched)]
 
 
 def _grafana_datasource_uid(value: object) -> str | None:

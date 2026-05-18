@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+from testing.ci.customer360_observability import EvidenceStatus
 from testing.demo.customer360_validator import (
     Customer360Config,
     Customer360Validator,
+    FailureClass,
 )
 
 
+@pytest.mark.requirement("alpha-demo")
 def test_customer360_validator_emits_normalized_evidence_and_compatibility_keys() -> None:
     """Successful validation emits alpha key families without dropping old keys."""
     config = Customer360Config(
@@ -36,9 +41,9 @@ def test_customer360_validator_emits_normalized_evidence_and_compatibility_keys(
                 }
             )
         return {
-            ("curl", "-fsS", "http://localhost:3100/server_info"): "{}",
-            ("curl", "-fsS", "http://localhost:5100/api/v1/namespaces"): "{}",
-            ("curl", "-fsS", "http://localhost:16686/api/services"): "{}",
+            ("curl", "-fsS", "--", "http://localhost:3100/server_info"): "{}",
+            ("curl", "-fsS", "--", "http://localhost:5100/api/v1/namespaces"): "{}",
+            ("curl", "-fsS", "--", "http://localhost:16686/api/services"): "{}",
             ("dagster-run",): "customer_360",
             ("lineage",): "customer_360",
             ("tracing",): "customer_360",
@@ -61,6 +66,33 @@ def test_customer360_validator_emits_normalized_evidence_and_compatibility_keys(
     assert result.evidence["business.customer_count"] == "500"
 
 
+@pytest.mark.requirement("alpha-demo")
+def test_customer360_validator_rejects_invalid_kubernetes_namespace() -> None:
+    """Namespace values must be Kubernetes-safe before invoking kubectl."""
+    commands: list[list[str]] = []
+
+    def run(command: list[str]) -> str:
+        commands.append(command)
+        return "{}"
+
+    result = Customer360Validator(
+        config=Customer360Config(namespace="bad;namespace"),
+        command_runner=run,
+    ).validate()
+
+    assert result.status == "FAIL"
+    assert commands == [
+        ["curl", "-fsS", "--", "http://localhost:3100/server_info"],
+        ["curl", "-fsS", "--", "http://localhost:5100/api/v1/namespaces"],
+        ["curl", "-fsS", "--", "http://localhost:16686/api/services"],
+    ]
+    assert any(
+        failure.startswith("platform_service_failure: Invalid Kubernetes namespace")
+        for failure in result.failures
+    )
+
+
+@pytest.mark.requirement("alpha-demo")
 def test_customer360_validator_classifies_unhealthy_platform_services() -> None:
     """Missing ready platform pods are platform service failures."""
     config = Customer360Config(platform_expected_services=("dagster",))
@@ -82,6 +114,7 @@ def test_customer360_validator_classifies_unhealthy_platform_services() -> None:
     )
 
 
+@pytest.mark.requirement("alpha-demo")
 def test_customer360_validator_classifies_missing_checks_as_contract_gaps() -> None:
     """Missing validation commands are contract gaps, not product failures."""
     config = Customer360Config(platform_expected_services=("dagster",))
@@ -104,6 +137,7 @@ def test_customer360_validator_classifies_missing_checks_as_contract_gaps() -> N
     )
 
 
+@pytest.mark.requirement("alpha-demo")
 def test_customer360_validator_classifies_business_assertion_failures() -> None:
     """Invalid generated mart assertions are product failures."""
     config = Customer360Config(
@@ -125,6 +159,14 @@ def test_customer360_validator_classifies_business_assertion_failures() -> None:
         failure == "product_failure: Customer 360 customer count check returned negative value"
         for failure in result.failures
     )
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_customer360_failure_class_vocabulary_matches_observability_statuses() -> None:
+    """Demo and backend validators share the same alpha failure vocabulary."""
+    assert {status.value for status in FailureClass} == {
+        status.value for status in EvidenceStatus if status is not EvidenceStatus.PASS
+    }
 
 
 def _ready_pod(name: str) -> dict[str, object]:
