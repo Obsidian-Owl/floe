@@ -1855,7 +1855,7 @@ def _marquez_model_table_job_names(
         if not name:
             continue
         job_name = str(name)
-        if _contains_value(job_name.lower(), context.table):
+        if _marquez_dataset_name_matches_table(job_name, context.table):
             job_names.add(job_name)
     return tuple(sorted(job_names))
 
@@ -1912,11 +1912,32 @@ def _marquez_model_table_record_matches_context(
     payload_text = _payload_text(record.payload)
     if not _contains_value(payload_text, context.product):
         return False
-    if context.table and not _contains_value(payload_text, context.table):
+    if context.table and not _marquez_record_job_name_matches_table(record, context.table):
         return False
     if _parent_run_id_from_marquez_payload(record.payload) != context.run_id:
         return False
     return _marquez_record_is_completed(record)
+
+
+def _marquez_record_job_name_matches_table(record: EvidenceRecord, table: str) -> bool:
+    job_name = _marquez_record_job_name(record)
+    return job_name is not None and _marquez_dataset_name_matches_table(job_name, table)
+
+
+def _marquez_record_job_name(record: EvidenceRecord) -> str | None:
+    job = record.payload.get("job")
+    if isinstance(job, Mapping):
+        name = job.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    name = (
+        record.payload.get("job_name")
+        or record.payload.get("jobName")
+        or record.payload.get("name")
+    )
+    if not isinstance(name, str) or not name.strip():
+        return None
+    return name.strip()
 
 
 def _marquez_dataset_record_matches_context(

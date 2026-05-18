@@ -542,6 +542,33 @@ def test_marquez_model_run_api_failure_reports_model_run_url() -> None:
 
 
 @pytest.mark.requirement("alpha-demo")
+def test_marquez_similarly_named_model_job_does_not_drive_model_run_query() -> None:
+    """Only the exact table model job can prove model/table run evidence."""
+    snapshot_model_run = {
+        **_model_run(),
+        "job": {"namespace": NAMESPACE, "name": SNAPSHOT_DATASET_NAME},
+        "table": "mart_customer_360_snapshot",
+    }
+    client = _FakeMarquezClient(
+        {
+            **_routes(jobs={"jobs": [{"name": JOB_NAME}, {"name": SNAPSHOT_DATASET_NAME}]}),
+            f"/api/v1/namespaces/{NAMESPACE}/jobs/{SNAPSHOT_DATASET_NAME}/runs": _FakeResponse(
+                {"runs": [snapshot_model_run]}
+            ),
+        }
+    )
+
+    result = _query(client)
+
+    assert result.status is EvidenceStatus.CONTRACT_GAP
+    assert result.diagnostics["contract_gap"] == "marquez_model_table_run_detail"
+    assert (
+        f"/api/v1/namespaces/{NAMESPACE}/jobs/{SNAPSHOT_DATASET_NAME}/runs"
+        not in client.requested_paths
+    )
+
+
+@pytest.mark.requirement("alpha-demo")
 def test_marquez_product_runs_without_model_table_runs_are_contract_gap() -> None:
     """Product runs without materialized model/table runs are an emission gap."""
     client = _FakeMarquezClient(_routes(jobs={"jobs": [{"name": JOB_NAME}]}))
