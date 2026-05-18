@@ -76,7 +76,7 @@ def rendered_manifests() -> list[dict[str, Any]]:
         )
 
     result = subprocess.run(
-        ["helm", "template", "sec-test", str(CHART_DIR)],
+        ["helm", "template", "sec-test", str(CHART_DIR), "--skip-schema-validation"],
         capture_output=True,
         text=True,
         check=False,

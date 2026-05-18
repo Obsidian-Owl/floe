@@ -398,5 +398,4 @@ observability:
   grafana:
     enabled: true
     refreshInterval: 30s
-    datasourceUid: prometheus
     datasources: []

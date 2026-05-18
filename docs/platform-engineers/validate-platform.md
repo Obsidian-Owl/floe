@@ -75,7 +75,13 @@ Current validator output keys, including alpha compatibility keys:
 
 - `platform.ready`
 - `dagster.customer_360_run`
+- `run_control.namespace`
+- `run_control.runtime_context`
+- `run_control.dagster.status`
+- `run_control.dagster.job_name`
+- `run_control.dagster.api_reachable`
 - `storage.customer_360_outputs`
+- `storage.iceberg.customer_360_outputs`
 - `observability.logs.status`
 - `observability.logs.count`
 - `observability.metrics.status`

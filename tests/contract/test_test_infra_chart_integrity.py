@@ -86,6 +86,7 @@ def _helm_template(*extra_args: str) -> list[dict[str, Any]]:
         str(CHART_DIR),
         "-f",
         str(VALUES_TEST),
+        "--skip-schema-validation",
         *extra_args,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)

@@ -514,19 +514,22 @@ def test_customer360_loki_helper_queries_logs_by_product_and_run() -> None:
     """Loki helper queries structured logs without live services."""
     client = _FakeClient(
         {
-            "data": {
-                "result": [
-                    {
-                        "stream": {"service_name": "customer-360"},
-                        "values": [
-                            [
-                                "1699999950000000000",
-                                '{"product":"customer-360","run_id":"run-123"}',
-                            ]
-                        ],
-                    }
-                ]
-            }
+            "http://loki/ready": {},
+            "http://loki/loki/api/v1/query_range": {
+                "data": {
+                    "result": [
+                        {
+                            "stream": {"service_name": "customer-360"},
+                            "values": [
+                                [
+                                    "1699999950000000000",
+                                    '{"product":"customer-360","run_id":"run-123"}',
+                                ]
+                            ],
+                        }
+                    ]
+                }
+            },
         }
     )
     context = ObservabilityContext(
@@ -545,8 +548,9 @@ def test_customer360_loki_helper_queries_logs_by_product_and_run() -> None:
     )
 
     assert result.status is EvidenceStatus.PASS
-    assert client.requests[0][0] == "http://loki/loki/api/v1/query_range"
-    params = client.requests[0][1]
+    assert client.requests[0] == ("http://loki/ready", None)
+    assert client.requests[1][0] == "http://loki/loki/api/v1/query_range"
+    params = client.requests[1][1]
     assert isinstance(params, Mapping)
     assert params["query"] == '{service_name=~".+"} |= "customer-360" |= "run-123"'
 

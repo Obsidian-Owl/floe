@@ -55,11 +55,11 @@ def _healthy_runner() -> FakeRunner:
                     ]
                 }
             ),
-            ("curl", "-fsS", "http://localhost:3100/server_info"): "{}",
-            ("curl", "-fsS", "http://localhost:5100/api/v1/namespaces"): json.dumps(
+            ("curl", "-fsS", "--", "http://localhost:3100/server_info"): "{}",
+            ("curl", "-fsS", "--", "http://localhost:5100/api/v1/namespaces"): json.dumps(
                 {"namespaces": [{"name": "customer_360"}]}
             ),
-            ("curl", "-fsS", "http://localhost:16686/api/services"): json.dumps(
+            ("curl", "-fsS", "--", "http://localhost:16686/api/services"): json.dumps(
                 {"data": ["dagster"]}
             ),
         }
@@ -91,10 +91,10 @@ def test_customer360_validator_reports_checked_service_evidence() -> None:
     assert result.evidence["storage.customer_360_outputs"] == "unknown"
     assert result.evidence["business.customer_count"] == "unknown"
     assert result.evidence["business.total_lifetime_value"] == "unknown"
-    assert "Customer 360 Dagster run check is not configured" in result.failures
-    assert "Customer 360 lineage check is not configured" in result.failures
-    assert "Customer 360 tracing check is not configured" in result.failures
-    assert "Customer 360 storage outputs check is not configured" in result.failures
+    assert "contract_gap: Customer 360 Dagster run check is not configured" in result.failures
+    assert "contract_gap: Customer 360 lineage check is not configured" in result.failures
+    assert "contract_gap: Customer 360 tracing check is not configured" in result.failures
+    assert "contract_gap: Customer 360 storage outputs check is not configured" in result.failures
 
 
 @pytest.mark.requirement("alpha-demo")
@@ -111,7 +111,7 @@ def test_customer360_validator_fails_when_expected_text_is_empty() -> None:
 
     assert result.status == "FAIL"
     assert result.evidence["lineage.marquez_customer_360"] == "false"
-    assert "Customer 360 lineage expected text must be non-empty" in result.failures
+    assert "contract_gap: Customer 360 lineage expected text must be non-empty" in result.failures
 
 
 @pytest.mark.requirement("alpha-demo")
@@ -132,7 +132,7 @@ def test_customer360_validator_fails_when_lineage_output_lacks_customer360_text(
 
     assert result.status == "FAIL"
     assert result.evidence["lineage.marquez_customer_360"] == "false"
-    assert "Customer 360 lineage evidence was not found" in result.failures
+    assert "no_fresh_evidence: Customer 360 lineage evidence was not found" in result.failures
 
 
 @pytest.mark.requirement("alpha-demo")
@@ -157,11 +157,13 @@ def test_customer360_validator_uses_configurable_namespace_and_urls() -> None:
                     ]
                 }
             ),
-            ("curl", "-fsS", "http://dagster.example/server_info"): "{}",
-            ("curl", "-fsS", "http://marquez.example/api/v1/namespaces"): json.dumps(
+            ("curl", "-fsS", "--", "http://dagster.example/server_info"): "{}",
+            ("curl", "-fsS", "--", "http://marquez.example/api/v1/namespaces"): json.dumps(
                 {"namespaces": [{"name": "customer-360"}]}
             ),
-            ("curl", "-fsS", "http://jaeger.example/api/services"): json.dumps({"data": ["floe"]}),
+            ("curl", "-fsS", "--", "http://jaeger.example/api/services"): json.dumps(
+                {"data": ["floe"]}
+            ),
         }
     )
 
@@ -169,9 +171,9 @@ def test_customer360_validator_uses_configurable_namespace_and_urls() -> None:
 
     assert runner.commands == [
         ("kubectl", "get", "pods", "-n", "custom-ns", "-o", "json"),
-        ("curl", "-fsS", "http://dagster.example/server_info"),
-        ("curl", "-fsS", "http://marquez.example/api/v1/namespaces"),
-        ("curl", "-fsS", "http://jaeger.example/api/services"),
+        ("curl", "-fsS", "--", "http://dagster.example/server_info"),
+        ("curl", "-fsS", "--", "http://marquez.example/api/v1/namespaces"),
+        ("curl", "-fsS", "--", "http://jaeger.example/api/services"),
     ]
 
 
@@ -183,11 +185,11 @@ def test_customer360_validator_requires_expected_platform_services() -> None:
             ("kubectl", "get", "pods", "-n", "floe-dev", "-o", "json"): json.dumps(
                 {"items": [_ready_pod("unrelated-worker")]}
             ),
-            ("curl", "-fsS", "http://localhost:3100/server_info"): "{}",
-            ("curl", "-fsS", "http://localhost:5100/api/v1/namespaces"): json.dumps(
+            ("curl", "-fsS", "--", "http://localhost:3100/server_info"): "{}",
+            ("curl", "-fsS", "--", "http://localhost:5100/api/v1/namespaces"): json.dumps(
                 {"namespaces": []}
             ),
-            ("curl", "-fsS", "http://localhost:16686/api/services"): json.dumps({"data": []}),
+            ("curl", "-fsS", "--", "http://localhost:16686/api/services"): json.dumps({"data": []}),
         }
     )
 
@@ -195,7 +197,7 @@ def test_customer360_validator_requires_expected_platform_services() -> None:
 
     assert result.evidence["platform.ready"] == "false"
     assert (
-        "Expected platform services are not ready in namespace floe-dev: "
+        "platform_service_failure: Expected platform services are not ready in namespace floe-dev: "
         "dagster, polaris, minio, jaeger, marquez"
     ) in result.failures
 
@@ -210,7 +212,8 @@ def test_customer360_validator_rejects_empty_expected_platform_services() -> Non
 
     assert result.evidence["platform.ready"] == "false"
     assert (
-        "Platform expected services must contain at least one service fragment" in result.failures
+        "platform_service_failure: Platform expected services must contain at least one "
+        "service fragment" in result.failures
     )
 
 
@@ -237,7 +240,8 @@ def test_customer360_validator_requires_ready_condition_for_running_pods() -> No
 
     assert result.evidence["platform.ready"] == "false"
     assert (
-        "Expected platform services are not ready in namespace floe-dev: dagster" in result.failures
+        "platform_service_failure: Expected platform services are not ready in namespace "
+        "floe-dev: dagster" in result.failures
     )
 
 
@@ -320,7 +324,7 @@ def test_customer360_validator_rejects_invalid_business_metrics(
     result = Customer360Validator(config=config, command_runner=runner).validate()
 
     assert result.status == "FAIL"
-    assert expected_failure in result.failures
+    assert f"product_failure: {expected_failure}" in result.failures
 
 
 @pytest.mark.requirement("alpha-demo")
@@ -348,7 +352,9 @@ def test_customer360_validator_reports_business_metric_command_failure() -> None
 
     result = Customer360Validator(config=config, command_runner=runner).validate()
 
-    assert "Customer 360 customer count check command failed: boom" in result.failures
+    assert (
+        "product_failure: Customer 360 customer count check command failed: boom" in result.failures
+    )
 
 
 @pytest.mark.requirement("alpha-demo")

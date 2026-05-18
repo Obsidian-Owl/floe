@@ -44,7 +44,13 @@ Current validator output keys, including alpha compatibility keys:
 
 - `platform.ready`
 - `dagster.customer_360_run`
+- `run_control.namespace`
+- `run_control.runtime_context`
+- `run_control.dagster.status`
+- `run_control.dagster.job_name`
+- `run_control.dagster.api_reachable`
 - `storage.customer_360_outputs`
+- `storage.iceberg.customer_360_outputs`
 - `observability.logs.status`
 - `observability.logs.count`
 - `observability.metrics.status`
@@ -84,6 +90,11 @@ evidence.business.customer_count=<non-negative integer>
 evidence.business.total_lifetime_value=<non-negative decimal>
 evidence.dagster.customer_360_run=true
 evidence.lineage.marquez_customer_360=true
+evidence.run_control.dagster.api_reachable=true
+evidence.run_control.dagster.job_name=customer_360
+evidence.run_control.dagster.status=pass
+evidence.run_control.namespace=floe-dev
+evidence.run_control.runtime_context=local
 evidence.observability.lineage.status=pass
 evidence.observability.lineage.count=<positive integer>
 evidence.observability.lineage.product_run_count=<positive integer>
@@ -101,6 +112,7 @@ evidence.observability.traces.status=pass
 evidence.observability.traces.count=<positive integer>
 evidence.platform.ready=true
 evidence.storage.customer_360_outputs=true
+evidence.storage.iceberg.customer_360_outputs=true
 evidence.tracing.jaeger_customer_360=true
 ```
 
