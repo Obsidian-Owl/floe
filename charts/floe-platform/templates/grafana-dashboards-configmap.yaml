@@ -2,7 +2,7 @@
 {{- $grafanaDatasources := .Values.observability.grafana.datasources | default list }}
 {{- $hasCustomGrafanaDatasources := gt (len $grafanaDatasources) 0 }}
 {{- $datasourceUids := .Values.observability.grafana.datasourceUids | default dict }}
-{{- $prometheusDatasourceUid := (get $datasourceUids "prometheus") | default (.Values.observability.grafana.datasourceUid | default "prometheus") }}
+{{- $prometheusDatasourceUid := (get $datasourceUids "prometheus") | default "prometheus" }}
 {{- $lokiDatasourceUid := (get $datasourceUids "loki") | default "loki" }}
 {{- $jaegerDatasourceUid := (get $datasourceUids "jaeger") | default "jaeger" }}
 {{- $customDatasourceUids := list }}
@@ -18,8 +18,11 @@
 {{- if and .Values.prometheus.enabled .Values.loki.enabled (not (has $lokiDatasourceUid $customDatasourceUids)) }}
 {{- fail (printf "dashboard_datasource_drift: Loki dashboard panels require datasource UID %q, but observability.grafana.datasources provides UIDs %v. Set observability.grafana.datasourceUids.loki to the custom Loki UID or provide a datasource with the expected UID." $lokiDatasourceUid $customDatasourceUids) }}
 {{- end }}
+{{- if and .Values.prometheus.enabled .Values.jaeger.enabled (not (has $jaegerDatasourceUid $customDatasourceUids)) }}
+{{- fail (printf "dashboard_datasource_drift: Jaeger dashboards require datasource UID %q, but observability.grafana.datasources provides UIDs %v. Set observability.grafana.datasourceUids.jaeger to the custom Jaeger UID or provide a datasource with the expected UID." $jaegerDatasourceUid $customDatasourceUids) }}
 {{- end }}
-{{- $dashboardContext := merge (dict "PrometheusDatasourceUid" $prometheusDatasourceUid "LokiDatasourceUid" $lokiDatasourceUid "JaegerDatasourceUid" $jaegerDatasourceUid "GrafanaRefreshInterval" (.Values.observability.grafana.refreshInterval | default "30s")) . }}
+{{- end }}
+{{- $dashboardContext := merge (dict "PrometheusDatasourceUid" $prometheusDatasourceUid "LokiDatasourceUid" $lokiDatasourceUid "GrafanaRefreshInterval" (.Values.observability.grafana.refreshInterval | default "30s")) . }}
 {{- if .Values.prometheus.enabled }}
 ---
 apiVersion: v1

@@ -1129,9 +1129,6 @@ observability:
     # Dashboard refresh interval (used in dashboards)
     refreshInterval: 30s
 
-    # Datasource UID (must match Prometheus datasource in Grafana)
-    datasourceUid: prometheus
-
     # Datasource UIDs used by curated dashboards and generated datasource
     # provisioning. Keep these stable across local and DevPod namespaces, or
     # override all matching values together when using external Grafana.

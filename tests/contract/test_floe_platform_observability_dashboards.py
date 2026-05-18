@@ -35,24 +35,31 @@ SUPPORTED_ALPHA_METRICS = (
 )
 
 
+@pytest.mark.requirement("ALPHA-OBS-001")
 def test_curated_dashboards_reference_provisioned_datasources() -> None:
     """Rendered dashboard UIDs must match generated datasource provisioning."""
     docs = _render_demo_chart()
-    _assert_dashboards_reference_provisioned_datasources(docs)
+    _assert_dashboards_reference_provisioned_datasources(docs, dashboards_required=True)
 
 
+@pytest.mark.requirement("ALPHA-OBS-001")
 def test_default_dashboards_do_not_reference_unprovisioned_datasources() -> None:
     """Base chart render must not create datasource drift when Prometheus is off."""
     docs = _render_chart()
-    _assert_dashboards_reference_provisioned_datasources(docs)
+    assert _maybe_find_configmap(docs, "floe-platform-grafana-dashboards") is None
 
 
 def _assert_dashboards_reference_provisioned_datasources(
     docs: list[dict[str, Any]],
+    *,
+    dashboards_required: bool = False,
 ) -> None:
-    dashboard_config = _maybe_find_configmap(docs, "floe-platform-grafana-dashboards")
-    if dashboard_config is None:
-        return
+    if dashboards_required:
+        dashboard_config = _find_configmap(docs, "floe-platform-grafana-dashboards")
+    else:
+        dashboard_config = _maybe_find_configmap(docs, "floe-platform-grafana-dashboards")
+        if dashboard_config is None:
+            return
     datasource_config = _find_configmap(docs, "floe-platform-grafana-datasources")
 
     datasource_uids = _datasource_uids(datasource_config)
@@ -65,6 +72,7 @@ def _assert_dashboards_reference_provisioned_datasources(
     )
 
 
+@pytest.mark.requirement("ALPHA-OBS-002")
 def test_curated_dashboards_omit_unsupported_alpha_metric_families() -> None:
     """Dashboards must query emitted Floe runtime signals, not stale families."""
     docs = _render_demo_chart()
@@ -83,6 +91,7 @@ def test_curated_dashboards_omit_unsupported_alpha_metric_families() -> None:
     )
 
 
+@pytest.mark.requirement("ALPHA-OBS-003")
 def test_custom_datasource_uids_render_consistently() -> None:
     """UID overrides must update both provisioned datasources and dashboards."""
     docs = _render_demo_chart(
@@ -106,6 +115,7 @@ def test_custom_datasource_uids_render_consistently() -> None:
     assert {"floe-prom", "floe-logs"} <= dashboard_refs
 
 
+@pytest.mark.requirement("ALPHA-OBS-004")
 def test_custom_datasources_fail_when_dashboard_uids_do_not_match() -> None:
     """Custom datasources must not silently create dashboard datasource drift."""
     result = _helm_template_result(
@@ -127,6 +137,50 @@ def test_custom_datasources_fail_when_dashboard_uids_do_not_match() -> None:
     assert DASHBOARD_DRIFT_CLASS in result.stderr
 
 
+@pytest.mark.requirement("ALPHA-OBS-004")
+def test_custom_datasources_fail_when_jaeger_uid_does_not_match() -> None:
+    """Custom Jaeger datasources must use the configured trace datasource UID."""
+    result = _helm_template_result(
+        "-f",
+        str(DEMO_VALUES),
+        "--set",
+        "observability.grafana.datasources[0].name=External Prometheus",
+        "--set",
+        "observability.grafana.datasources[0].type=prometheus",
+        "--set",
+        "observability.grafana.datasources[0].uid=prometheus",
+        "--set",
+        "observability.grafana.datasources[0].url=http://external-prometheus:9090",
+        "--set",
+        "observability.grafana.datasources[0].access=proxy",
+        "--set",
+        "observability.grafana.datasources[1].name=External Loki",
+        "--set",
+        "observability.grafana.datasources[1].type=loki",
+        "--set",
+        "observability.grafana.datasources[1].uid=loki",
+        "--set",
+        "observability.grafana.datasources[1].url=http://external-loki:3100",
+        "--set",
+        "observability.grafana.datasources[1].access=proxy",
+        "--set",
+        "observability.grafana.datasources[2].name=External Jaeger",
+        "--set",
+        "observability.grafana.datasources[2].type=jaeger",
+        "--set",
+        "observability.grafana.datasources[2].uid=external-jaeger",
+        "--set",
+        "observability.grafana.datasources[2].url=http://external-jaeger:16686",
+        "--set",
+        "observability.grafana.datasources[2].access=proxy",
+    )
+
+    assert result.returncode != 0
+    assert DASHBOARD_DRIFT_CLASS in result.stderr
+    assert "Jaeger" in result.stderr
+
+
+@pytest.mark.requirement("ALPHA-OBS-004")
 def test_custom_datasources_can_match_dashboard_uid_overrides() -> None:
     """External Grafana datasource provisioning remains supported when UIDs agree."""
     docs = _render_demo_chart(
@@ -168,9 +222,10 @@ def test_custom_datasources_can_match_dashboard_uid_overrides() -> None:
         "observability.grafana.datasources[2].access=proxy",
     )
 
-    _assert_dashboards_reference_provisioned_datasources(docs)
+    _assert_dashboards_reference_provisioned_datasources(docs, dashboards_required=True)
 
 
+@pytest.mark.requirement("ALPHA-OBS-005")
 def test_demo_datasources_point_at_floe_chart_backends() -> None:
     """Local and DevPod dashboards must resolve against Floe platform services."""
     docs = _render_demo_chart()
@@ -183,6 +238,7 @@ def test_demo_datasources_point_at_floe_chart_backends() -> None:
     assert urls_by_type["jaeger"] == "http://floe-platform-jaeger-query:16686"
 
 
+@pytest.mark.requirement("ALPHA-OBS-006")
 def test_prometheus_scrapes_otel_collector_and_itself() -> None:
     """Prometheus must expose target health for the platform metric path."""
     docs = _render_demo_chart()
