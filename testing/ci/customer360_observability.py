@@ -14,6 +14,7 @@ import re
 import signal
 import threading
 import time
+from collections import deque
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -673,7 +674,7 @@ def query_marquez_lineage(
                     )
                 )
         graph_records: list[EvidenceRecord] = []
-        for dataset_name in _marquez_dataset_names(dataset_records, context):
+        for dataset_name in _marquez_dataset_names(dataset_records, context, namespace=namespace):
             lineage_url = _join_url(marquez_url, "api/v1/lineage")
             active_url = lineage_url
             lineage_response = http_client.get(
@@ -1347,7 +1348,7 @@ def _marquez_graph_node_count(payload: Mapping[str, Any]) -> int:
         nodes = graph.get("nodes")
         if isinstance(nodes, list):
             return len(nodes)
-        return len(graph)
+        return 0
     if isinstance(graph, list):
         return len(graph)
     return 0
@@ -1403,6 +1404,8 @@ def _marquez_graph_target_dataset_ids(
     *,
     namespace: str,
 ) -> set[str]:
+    if not context.table:
+        return set()
     return {
         node_id
         for node_id in _marquez_graph_node_ids(payload)
@@ -1419,7 +1422,6 @@ def _marquez_graph_adjacency(
     for origin, destination in _marquez_graph_edges(payload):
         if origin not in node_ids or destination not in node_ids:
             continue
-        adjacency[origin].add(destination)
         adjacency[destination].add(origin)
     return adjacency
 
@@ -1429,9 +1431,9 @@ def _marquez_graph_distances(
     adjacency: Mapping[str, set[str]],
 ) -> dict[str, int]:
     distances = {node_id: 0 for node_id in start_ids if node_id in adjacency}
-    frontier = list(distances)
+    frontier = deque(distances)
     while frontier:
-        current = frontier.pop(0)
+        current = frontier.popleft()
         for neighbor in adjacency[current]:
             if neighbor in distances:
                 continue
@@ -1617,6 +1619,8 @@ def _marquez_model_table_job_names(
 def _marquez_dataset_names(
     dataset_records: Sequence[EvidenceRecord],
     context: ObservabilityContext,
+    *,
+    namespace: str,
 ) -> tuple[str, ...]:
     if not context.table:
         return ()
@@ -1625,7 +1629,7 @@ def _marquez_dataset_names(
         if not _marquez_dataset_record_matches_context(
             record,
             context,
-            namespace=str(record.payload.get("namespace", "")),
+            namespace=namespace,
         ):
             continue
         name = record.payload.get("name") or record.payload.get("dataset_name")
@@ -2085,7 +2089,7 @@ def _join_url(base_url: str, path: str) -> str:
 
 def _response_status_code(response: object) -> int | None:
     status_code = getattr(response, "status_code", None)
-    return int(status_code) if isinstance(status_code, int) else None
+    return status_code if isinstance(status_code, int) else None
 
 
 def _blank_to_none(value: str | None) -> str | None:

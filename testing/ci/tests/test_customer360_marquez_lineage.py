@@ -8,8 +8,10 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 from customer360_observability import (
+    EvidenceResult,
     EvidenceStatus,
     ObservabilityContext,
+    _marquez_graph_node_count,
     query_marquez_lineage,
 )
 
@@ -20,8 +22,10 @@ RUN_ID = "customer-360-run-123"
 TABLE = "mart_customer_360"
 DATASET_NAME = "customer_360.main.mart_customer_360"
 UPSTREAM_DATASET_NAME = "customer_360.main.stg_customers"
+DOWNSTREAM_DATASET_NAME = "customer_360.main.customer_360_export"
 DATASET_NODE_ID = f"dataset:{NAMESPACE}:{DATASET_NAME}"
 UPSTREAM_DATASET_NODE_ID = f"dataset:{NAMESPACE}:{UPSTREAM_DATASET_NAME}"
+DOWNSTREAM_DATASET_NODE_ID = f"dataset:{NAMESPACE}:{DOWNSTREAM_DATASET_NAME}"
 JOB_NODE_ID = f"job:{NAMESPACE}:{DATASET_NAME}"
 FRESH_EPOCH_SECONDS = 1_700_000_000.0
 
@@ -165,7 +169,7 @@ def _routes(
     }
 
 
-def _query(client: _FakeMarquezClient) -> Any:
+def _query(client: _FakeMarquezClient) -> EvidenceResult:
     return query_marquez_lineage(
         marquez_url=MARQUEZ_URL,
         namespace=NAMESPACE,
@@ -230,9 +234,7 @@ def test_marquez_product_runs_without_dataset_or_graph_detail_are_contract_gap()
 
     result = _query(client)
 
-    contract_gap = EvidenceStatus.__members__.get("CONTRACT_GAP")
-    assert contract_gap is not None, "EvidenceStatus.CONTRACT_GAP is required"
-    assert result.status is contract_gap
+    assert result.status is EvidenceStatus.CONTRACT_GAP
     assert result.url == f"{MARQUEZ_URL}/api/v1/namespaces/{NAMESPACE}/datasets"
 
 
@@ -303,6 +305,23 @@ def test_marquez_product_runs_with_ghost_lineage_edge_are_contract_gap() -> None
 
 
 @pytest.mark.requirement("alpha-demo")
+def test_marquez_graph_node_count_ignores_mapping_keys_without_nodes() -> None:
+    """Malformed graph mappings without nodes do not count dict keys as nodes."""
+    node_count = _marquez_graph_node_count(
+        {
+            "graph": {
+                "edges": [
+                    {"origin": UPSTREAM_DATASET_NODE_ID, "destination": JOB_NODE_ID},
+                    {"origin": JOB_NODE_ID, "destination": DATASET_NODE_ID},
+                ]
+            }
+        }
+    )
+
+    assert node_count == 0
+
+
+@pytest.mark.requirement("alpha-demo")
 def test_marquez_product_runs_with_target_job_only_lineage_graph_are_contract_gap() -> None:
     """Target-to-job alone does not prove upstream model/table lineage depth."""
     client = _FakeMarquezClient(
@@ -314,6 +333,33 @@ def test_marquez_product_runs_with_target_job_only_lineage_graph_are_contract_ga
                         {"id": JOB_NODE_ID, "type": "JOB"},
                     ],
                     "edges": [{"origin": JOB_NODE_ID, "destination": DATASET_NODE_ID}],
+                },
+            },
+        )
+    )
+
+    result = _query(client)
+
+    assert result.status is EvidenceStatus.CONTRACT_GAP
+    assert result.diagnostics["contract_gap"] == "marquez_lineage_graph_detail"
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_marquez_product_runs_with_downstream_only_lineage_graph_are_contract_gap() -> None:
+    """Downstream lineage from the target table is not upstream model/table proof."""
+    client = _FakeMarquezClient(
+        _routes(
+            lineage={
+                "graph": {
+                    "nodes": [
+                        {"id": DATASET_NODE_ID, "type": "DATASET"},
+                        {"id": JOB_NODE_ID, "type": "JOB"},
+                        {"id": DOWNSTREAM_DATASET_NODE_ID, "type": "DATASET"},
+                    ],
+                    "edges": [
+                        {"origin": DATASET_NODE_ID, "destination": JOB_NODE_ID},
+                        {"origin": JOB_NODE_ID, "destination": DOWNSTREAM_DATASET_NODE_ID},
+                    ],
                 },
             },
         )
@@ -346,6 +392,31 @@ def test_marquez_dataset_evidence_from_wrong_namespace_is_wrong_context() -> Non
     assert result.status is EvidenceStatus.WRONG_CONTEXT
     assert result.diagnostics["expected_context"] == f"{NAMESPACE} / {RUN_ID} / {TABLE}"
     assert result.url == f"{MARQUEZ_URL}/api/v1/namespaces/{NAMESPACE}/datasets"
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_marquez_wrong_namespace_dataset_does_not_drive_lineage_query() -> None:
+    """Wrong-namespace dataset records are classified before graph API calls."""
+    client = _FakeMarquezClient(
+        {
+            **_routes(
+                datasets={
+                    "datasets": [
+                        {
+                            "namespace": "wrong-namespace",
+                            "name": DATASET_NAME,
+                        }
+                    ]
+                }
+            ),
+            "/api/v1/lineage": _FakeResponse({}, status_code=500),
+        }
+    )
+
+    result = _query(client)
+
+    assert result.status is EvidenceStatus.WRONG_CONTEXT
+    assert "/api/v1/lineage" not in client.requested_paths
 
 
 @pytest.mark.requirement("alpha-demo")
@@ -424,6 +495,7 @@ def test_marquez_lineage_pass_includes_product_model_dataset_and_graph_diagnosti
     assert result.diagnostics["dataset_count"] == "1"
     assert result.diagnostics["lineage_graph_depth"] == "2"
     assert result.diagnostics["lineage_graph_requested_depth"] == "3"
+    assert result.diagnostics["lineage_graph_count"] == "1"
 
 
 @pytest.mark.requirement("alpha-demo")
