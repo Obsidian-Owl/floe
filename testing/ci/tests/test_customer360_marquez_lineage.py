@@ -457,6 +457,39 @@ def test_marquez_wrong_namespace_dataset_does_not_drive_lineage_query() -> None:
 
 
 @pytest.mark.requirement("alpha-demo")
+def test_marquez_similarly_named_dataset_does_not_drive_lineage_query() -> None:
+    """Only the exact table dataset record can drive graph API calls."""
+    client = _FakeMarquezClient(
+        _routes(
+            datasets={
+                "datasets": [
+                    {
+                        "namespace": NAMESPACE,
+                        "name": DATASET_NAME,
+                    },
+                    {
+                        "namespace": NAMESPACE,
+                        "name": SNAPSHOT_DATASET_NAME,
+                    },
+                ]
+            }
+        )
+    )
+
+    result = _query(client)
+
+    assert result.status is EvidenceStatus.PASS
+    assert client.requested_path_with_params(
+        "/api/v1/lineage",
+        {"nodeId": DATASET_NODE_ID, "depth": "3"},
+    )
+    assert not client.requested_path_with_params(
+        "/api/v1/lineage",
+        {"nodeId": SNAPSHOT_DATASET_NODE_ID, "depth": "3"},
+    )
+
+
+@pytest.mark.requirement("alpha-demo")
 def test_marquez_graph_evidence_from_wrong_namespace_is_wrong_context() -> None:
     """Graph nodes must be in the expected Marquez namespace."""
     wrong_dataset_node = f"dataset:wrong-namespace:{DATASET_NAME}"

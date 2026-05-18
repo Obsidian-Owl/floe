@@ -1701,8 +1701,33 @@ def _marquez_dataset_record_matches_context(
         return False
     if str(record.payload.get("namespace", "")) != namespace:
         return False
-    payload_text = _payload_text(record.payload)
-    return _contains_value(payload_text, context.table)
+    dataset_name = _marquez_dataset_record_name(record)
+    return dataset_name is not None and _marquez_dataset_name_matches_table(
+        dataset_name,
+        context.table,
+    )
+
+
+def _marquez_dataset_record_name(record: EvidenceRecord) -> str | None:
+    name = (
+        record.payload.get("name")
+        or record.payload.get("dataset_name")
+        or record.payload.get("datasetName")
+    )
+    if not isinstance(name, str) or not name.strip():
+        return None
+    return name.strip()
+
+
+def _marquez_dataset_name_matches_table(dataset_name: str, table: str) -> bool:
+    normalized_name = dataset_name.lower()
+    exact_names = {normalized_name, re.split(r"[./:]", normalized_name)[-1]}
+    return any(variant in exact_names for variant in _value_variants(table))
+
+
+def _value_variants(value: str) -> set[str]:
+    normalized = value.lower()
+    return {normalized, normalized.replace("-", "_"), normalized.replace("_", "-")}
 
 
 def _marquez_lineage_graph_matches_context(
@@ -1859,9 +1884,7 @@ def _iter_status_values(payload: Mapping[str, Any]) -> Iterable[str]:
 
 
 def _contains_value(payload_text: str, value: str) -> bool:
-    normalized = value.lower()
-    variants = {normalized, normalized.replace("-", "_"), normalized.replace("_", "-")}
-    return any(variant in payload_text for variant in variants)
+    return any(variant in payload_text for variant in _value_variants(value))
 
 
 def _payload_text(payload: Mapping[str, Any]) -> str:
