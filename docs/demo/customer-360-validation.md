@@ -53,6 +53,12 @@ Current validator output keys, including alpha compatibility keys:
 - `observability.traces.count`
 - `observability.lineage.status`
 - `observability.lineage.count`
+- `observability.lineage.product_run_count`
+- `observability.lineage.model_table_count`
+- `observability.lineage.dataset_count`
+- `observability.lineage.lineage_graph_depth`
+- `observability.lineage.lineage_graph_requested_depth`
+- `observability.lineage.lineage_graph_count`
 - `observability.run_id`
 - `lineage.marquez_customer_360`
 - `tracing.jaeger_customer_360`
@@ -80,6 +86,12 @@ evidence.dagster.customer_360_run=true
 evidence.lineage.marquez_customer_360=true
 evidence.observability.lineage.status=pass
 evidence.observability.lineage.count=<positive integer>
+evidence.observability.lineage.product_run_count=<positive integer>
+evidence.observability.lineage.model_table_count=<positive integer>
+evidence.observability.lineage.dataset_count=<positive integer>
+evidence.observability.lineage.lineage_graph_depth=<connected hop count, at least 2>
+evidence.observability.lineage.lineage_graph_requested_depth=3
+evidence.observability.lineage.lineage_graph_count=<positive integer>
 evidence.observability.logs.status=pass
 evidence.observability.logs.count=<positive integer>
 evidence.observability.metrics.status=pass
@@ -98,7 +110,7 @@ The evidence maps to the release surfaces as follows:
 - Dagster evidence proves the configured `customer-360` run completed.
 - Log evidence proves the log backend has structured records for the product and run ID.
 - Metric evidence proves Prometheus-compatible series exist for the product, status, and plugin.
-- Lineage evidence proves Marquez has product run evidence and model/table run evidence linked to that run.
+- Lineage evidence proves Marquez has namespace-scoped product run evidence, model/table run evidence linked to that run, materialized dataset evidence, and lineage graph depth for the Customer 360 table.
 - Storage evidence proves the expected Iceberg output table is readable.
 - Tracing evidence proves Jaeger contains Customer 360 run traces by service, product, and run ID.
 
@@ -160,15 +172,42 @@ or equivalent dbt model span evidence for `mart_customer_360`.
 Marquez evidence must include both the product job run, usually
 `namespace=customer-360 job=customer-360`, and model/table run records for
 `mart_customer_360` whose `ParentRunFacet` points at the same Dagster run ID.
+The validator also queries namespace, dataset, and lineage graph APIs so root or
+UI availability is never treated as lineage proof.
 
 Marquez API examples:
 
 ```bash
+curl -fsS http://localhost:5100/api/v1/namespaces/customer-360 | jq .
 curl -fsS http://localhost:5100/api/v1/namespaces/customer-360/jobs | jq .
 curl -fsS http://localhost:5100/api/v1/namespaces/customer-360/jobs/customer-360/runs | jq .
 curl -fsS http://localhost:5100/api/v1/namespaces/customer-360/datasets | jq .
 curl -fsS 'http://localhost:5100/api/v1/lineage?nodeId=dataset:customer-360:customer_360.main.mart_customer_360&depth=3' | jq .
 ```
+
+Current contract-gap classes are explicit follow-ups rather than softened
+passes:
+
+- `marquez_model_table_run_detail`: product run evidence exists, but the runtime
+  has not emitted model/table runs linked to the product run. Tracked by
+  [#368](https://github.com/Obsidian-Owl/floe/issues/368).
+- `marquez_dataset_detail`: product and model/table runs exist, but Marquez does
+  not expose the materialized Customer 360 dataset through the namespace dataset
+  API. Tracked by [#368](https://github.com/Obsidian-Owl/floe/issues/368) and
+  [#362](https://github.com/Obsidian-Owl/floe/issues/362).
+- `marquez_lineage_graph_detail`: product, model/table, and dataset evidence
+  exist, but the lineage graph for `mart_customer_360` has no queryable depth.
+  Tracked by [#368](https://github.com/Obsidian-Owl/floe/issues/368) and
+  [#362](https://github.com/Obsidian-Owl/floe/issues/362).
+
+Related alpha follow-ups:
+
+- [#368](https://github.com/Obsidian-Owl/floe/issues/368): emit
+  model/table-linked OpenLineage and dataset graph depth for Customer 360.
+- [#362](https://github.com/Obsidian-Owl/floe/issues/362): provide
+  first-class catalog and lineage inspection paths.
+- [#360](https://github.com/Obsidian-Owl/floe/issues/360): add
+  model/table-level runtime traces for Customer 360.
 
 ## Failure Classification
 

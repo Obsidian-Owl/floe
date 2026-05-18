@@ -44,6 +44,7 @@ class EvidenceStatus(str, Enum):
     STALE_EVIDENCE = "stale_evidence"
     WRONG_CONTEXT = "wrong_context"
     PRODUCT_FAILURE = "product_failure"
+    CONTRACT_GAP = "contract_gap"
 
 
 FAILURE_STATUSES = {"FAILURE", "FAILED", "ERROR", "CANCELED", "CANCELLED"}
@@ -590,6 +591,7 @@ def query_marquez_lineage(
     """Query Marquez lineage by namespace/job/run context."""
     encoded_namespace = quote(namespace, safe="")
     encoded_job = quote(job_name, safe="")
+    namespace_url = _join_url(marquez_url, f"api/v1/namespaces/{encoded_namespace}")
     runs_url = _join_url(
         marquez_url,
         f"api/v1/namespaces/{encoded_namespace}/jobs/{encoded_job}/runs",
@@ -598,17 +600,54 @@ def query_marquez_lineage(
     query = f"namespace={namespace} job={job_name} run_id={context.run_id}"
     owns_client = client is None
     http_client = client or httpx.Client(timeout=timeout_seconds)
+    active_url = runs_url
     try:
+        active_url = namespace_url
+        namespace_response = http_client.get(namespace_url)
+        if _response_status_code(namespace_response) == 404:
+            return _marquez_wrong_context_result(
+                query=query,
+                context=context,
+                url=namespace_url,
+                message=f"lineage namespace {namespace!r} was not found in Marquez",
+            )
+        namespace_response.raise_for_status()
+
+        active_url = runs_url
         runs_response = http_client.get(runs_url)
+        if _response_status_code(runs_response) == 404:
+            return _marquez_wrong_context_result(
+                query=query,
+                context=context,
+                url=runs_url,
+                message=(
+                    f"lineage job {job_name!r} was not found in Marquez namespace {namespace!r}"
+                ),
+            )
         runs_response.raise_for_status()
         run_records = _marquez_records(
             runs_response.json(),
             namespace=namespace,
             job_name=job_name,
         )
+
+        active_url = jobs_url
         jobs_response = http_client.get(jobs_url)
         jobs_response.raise_for_status()
         job_records = _marquez_job_records(jobs_response.json(), namespace=namespace)
+
+        datasets_url = _join_url(
+            marquez_url,
+            f"api/v1/namespaces/{encoded_namespace}/datasets",
+        )
+        active_url = datasets_url
+        datasets_response = http_client.get(datasets_url)
+        datasets_response.raise_for_status()
+        dataset_records = _marquez_dataset_records(
+            datasets_response.json(),
+            namespace=namespace,
+        )
+
         model_run_records: list[EvidenceRecord] = []
         for model_job_name in _marquez_model_table_job_names(job_records, context):
             model_runs_url = _join_url(
@@ -618,6 +657,7 @@ def query_marquez_lineage(
                     f"{quote(model_job_name, safe='')}/runs"
                 ),
             )
+            active_url = model_runs_url
             model_runs_response = http_client.get(model_runs_url)
             model_runs_response.raise_for_status()
             for record in _marquez_records(
@@ -632,6 +672,26 @@ def query_marquez_lineage(
                         marquez_url=marquez_url,
                     )
                 )
+        graph_records: list[EvidenceRecord] = []
+        for dataset_name in _marquez_dataset_names(dataset_records, context):
+            lineage_url = _join_url(marquez_url, "api/v1/lineage")
+            active_url = lineage_url
+            lineage_response = http_client.get(
+                lineage_url,
+                params={
+                    "nodeId": f"dataset:{namespace}:{dataset_name}",
+                    "depth": "3",
+                },
+            )
+            lineage_response.raise_for_status()
+            graph_records.append(
+                _marquez_lineage_graph_record(
+                    lineage_response.json(),
+                    namespace=namespace,
+                    dataset_name=dataset_name,
+                    requested_depth=3,
+                )
+            )
     except Exception as exc:  # noqa: BLE001
         return classify_evidence_records(
             backend="lineage",
@@ -639,7 +699,7 @@ def query_marquez_lineage(
             context=context,
             records=None,
             backend_error=str(exc),
-            url=runs_url,
+            url=active_url,
         )
     finally:
         if owns_client:
@@ -648,9 +708,14 @@ def query_marquez_lineage(
     return _classify_marquez_lineage_records(
         query=query,
         context=context,
+        namespace=namespace,
         run_records=run_records,
         model_run_records=model_run_records,
+        dataset_records=dataset_records,
+        graph_records=graph_records,
         url=runs_url,
+        dataset_url=datasets_url,
+        lineage_url=_join_url(marquez_url, "api/v1/lineage"),
     )
 
 
@@ -821,6 +886,24 @@ def _build_proof_result(
     )
 
 
+def _marquez_wrong_context_result(
+    *,
+    query: str,
+    context: ObservabilityContext,
+    url: str,
+    message: str,
+) -> EvidenceResult:
+    expected = f"{context.product} / {context.run_id}"
+    return EvidenceResult(
+        backend="lineage",
+        status=EvidenceStatus.WRONG_CONTEXT,
+        query=query,
+        url=url,
+        message=message,
+        diagnostics={"expected_context": expected},
+    )
+
+
 def _result_evidence(prefix: str, result: EvidenceResult) -> dict[str, str]:
     evidence = {
         f"observability.{prefix}.status": result.status.value,
@@ -930,9 +1013,14 @@ def _classify_marquez_lineage_records(
     *,
     query: str,
     context: ObservabilityContext,
+    namespace: str,
     run_records: Sequence[EvidenceRecord],
     model_run_records: Sequence[EvidenceRecord],
+    dataset_records: Sequence[EvidenceRecord],
+    graph_records: Sequence[EvidenceRecord],
     url: str,
+    dataset_url: str,
+    lineage_url: str,
 ) -> EvidenceResult:
     product_context = ObservabilityContext(
         product=context.product,
@@ -959,6 +1047,26 @@ def _classify_marquez_lineage_records(
     if not table_result.ok:
         return table_result
 
+    dataset_result = _classify_marquez_dataset_records(
+        query=f"{query} dataset={context.table or '<none>'}",
+        context=context,
+        namespace=namespace,
+        records=dataset_records,
+        url=dataset_url,
+    )
+    if not dataset_result.ok:
+        return dataset_result
+
+    graph_result = _classify_marquez_lineage_graph_records(
+        query=f"{query} graph_depth=3 table={context.table or '<none>'}",
+        context=context,
+        namespace=namespace,
+        records=graph_records,
+        url=lineage_url,
+    )
+    if not graph_result.ok:
+        return graph_result
+
     return EvidenceResult(
         backend="lineage",
         status=EvidenceStatus.PASS,
@@ -968,10 +1076,25 @@ def _classify_marquez_lineage_records(
             f"lineage backend returned product run evidence for {context.run_id} "
             f"and model/table evidence for {context.table}"
         ),
-        records=(*product_result.records, *table_result.records),
+        records=(
+            *product_result.records,
+            *table_result.records,
+            *dataset_result.records,
+            *graph_result.records,
+        ),
         diagnostics={
             "product_run_count": str(product_result.evidence_count),
             "model_table_count": str(table_result.evidence_count),
+            "dataset_count": str(dataset_result.evidence_count),
+            "lineage_graph_depth": graph_result.diagnostics.get(
+                "lineage_graph_depth",
+                "unknown",
+            ),
+            "lineage_graph_requested_depth": graph_result.diagnostics.get(
+                "lineage_graph_requested_depth",
+                "unknown",
+            ),
+            "lineage_graph_count": str(graph_result.evidence_count),
         },
     )
 
@@ -987,13 +1110,15 @@ def _classify_marquez_model_table_run_records(
     if not record_tuple:
         return EvidenceResult(
             backend="lineage",
-            status=EvidenceStatus.NO_FRESH_EVIDENCE,
+            status=EvidenceStatus.CONTRACT_GAP,
             query=query,
             url=url,
             message=(
-                "lineage backend returned no fresh model/table run evidence linked to "
+                "lineage backend returned product run evidence but no model/table run evidence "
+                "linked to "
                 f"{context.product}/{context.run_id}/{context.table or '<none>'}"
             ),
+            diagnostics={"contract_gap": "marquez_model_table_run_detail"},
         )
 
     matching_context = [
@@ -1070,6 +1195,339 @@ def _classify_marquez_model_table_run_records(
         ),
         records=tuple(fresh_records),
     )
+
+
+def _classify_marquez_dataset_records(
+    *,
+    query: str,
+    context: ObservabilityContext,
+    namespace: str,
+    records: Sequence[EvidenceRecord],
+    url: str,
+) -> EvidenceResult:
+    record_tuple = tuple(records)
+    if not record_tuple:
+        return EvidenceResult(
+            backend="lineage",
+            status=EvidenceStatus.CONTRACT_GAP,
+            query=query,
+            url=url,
+            message=(
+                "lineage backend returned product/model runs but no dataset API evidence "
+                f"for {context.table or '<none>'}"
+            ),
+            diagnostics={"contract_gap": "marquez_dataset_detail"},
+        )
+
+    matching_context = [
+        record
+        for record in record_tuple
+        if _marquez_dataset_record_matches_context(record, context, namespace=namespace)
+    ]
+    if not matching_context:
+        return EvidenceResult(
+            backend="lineage",
+            status=EvidenceStatus.WRONG_CONTEXT,
+            query=query,
+            url=url,
+            message=(
+                "lineage backend returned dataset evidence, but none matched "
+                f"namespace/table context {namespace}/{context.table or '<none>'}"
+            ),
+            records=record_tuple,
+            diagnostics={
+                "expected_context": (
+                    f"{context.product} / {context.run_id} / {context.table or '<none>'}"
+                )
+            },
+        )
+
+    return EvidenceResult(
+        backend="lineage",
+        status=EvidenceStatus.PASS,
+        query=query,
+        url=url,
+        message=f"lineage backend returned dataset evidence for {context.table}",
+        records=tuple(matching_context),
+    )
+
+
+def _classify_marquez_lineage_graph_records(
+    *,
+    query: str,
+    context: ObservabilityContext,
+    namespace: str,
+    records: Sequence[EvidenceRecord],
+    url: str,
+) -> EvidenceResult:
+    record_tuple = tuple(records)
+    if not record_tuple:
+        return EvidenceResult(
+            backend="lineage",
+            status=EvidenceStatus.CONTRACT_GAP,
+            query=query,
+            url=url,
+            message=(
+                "lineage backend returned product/model/dataset evidence but no lineage "
+                f"graph records for {context.table or '<none>'}"
+            ),
+            diagnostics={"contract_gap": "marquez_lineage_graph_detail"},
+        )
+
+    matching_context = [
+        record
+        for record in record_tuple
+        if _marquez_lineage_graph_matches_context(record, context, namespace=namespace)
+    ]
+    if not matching_context:
+        return EvidenceResult(
+            backend="lineage",
+            status=EvidenceStatus.WRONG_CONTEXT,
+            query=query,
+            url=url,
+            message=(
+                "lineage backend returned graph evidence, but none matched "
+                f"namespace/table context {namespace}/{context.table or '<none>'}"
+            ),
+            records=record_tuple,
+            diagnostics={
+                "expected_context": (
+                    f"{context.product} / {context.run_id} / {context.table or '<none>'}"
+                )
+            },
+        )
+
+    node_count = sum(_marquez_graph_node_count(record.payload) for record in matching_context)
+    edge_count = sum(_marquez_graph_edge_count(record.payload) for record in matching_context)
+    lineage_depth = max(
+        (
+            _marquez_graph_model_depth(record.payload, context, namespace=namespace)
+            for record in matching_context
+        ),
+        default=0,
+    )
+
+    if node_count < 3 or lineage_depth < 2:
+        return EvidenceResult(
+            backend="lineage",
+            status=EvidenceStatus.CONTRACT_GAP,
+            query=query,
+            url=url,
+            message=(
+                "lineage backend returned a shallow lineage graph without upstream "
+                f"model/table depth for {context.table or '<none>'}"
+            ),
+            records=tuple(matching_context),
+            diagnostics={
+                "contract_gap": "marquez_lineage_graph_detail",
+                "lineage_graph_node_count": str(node_count),
+                "lineage_graph_edge_count": str(edge_count),
+            },
+        )
+
+    return EvidenceResult(
+        backend="lineage",
+        status=EvidenceStatus.PASS,
+        query=query,
+        url=url,
+        message=f"lineage backend returned graph evidence for {context.table}",
+        records=tuple(matching_context),
+        diagnostics={
+            "lineage_graph_depth": str(lineage_depth),
+            "lineage_graph_requested_depth": _marquez_requested_graph_depth(matching_context),
+            "lineage_graph_node_count": str(node_count),
+            "lineage_graph_edge_count": str(edge_count),
+        },
+    )
+
+
+def _marquez_graph_node_count(payload: Mapping[str, Any]) -> int:
+    graph = payload.get("graph")
+    if isinstance(graph, Mapping):
+        nodes = graph.get("nodes")
+        if isinstance(nodes, list):
+            return len(nodes)
+        return len(graph)
+    if isinstance(graph, list):
+        return len(graph)
+    return 0
+
+
+def _marquez_graph_edge_count(payload: Mapping[str, Any]) -> int:
+    graph = payload.get("graph")
+    if isinstance(graph, list):
+        return len(_marquez_list_graph_edges(graph))
+    if isinstance(graph, Mapping):
+        edges = graph.get("edges")
+        if isinstance(edges, list):
+            return len(edges)
+        return 0
+    return 0
+
+
+def _marquez_graph_model_depth(
+    payload: Mapping[str, Any],
+    context: ObservabilityContext,
+    *,
+    namespace: str,
+) -> int:
+    target_ids = _marquez_graph_target_dataset_ids(payload, context, namespace=namespace)
+    if not target_ids:
+        return 0
+
+    node_ids = _marquez_graph_node_ids(payload)
+    adjacency = _marquez_graph_adjacency(payload, node_ids)
+    if not any(adjacency.values()):
+        return 0
+
+    distances = _marquez_graph_distances(target_ids, adjacency)
+    has_job_or_run = any(
+        _marquez_node_id_is_job_or_run_in_namespace(node_id, namespace=namespace) and distance >= 1
+        for node_id, distance in distances.items()
+    )
+    if not has_job_or_run:
+        return 0
+
+    upstream_dataset_depths = [
+        distance
+        for node_id, distance in distances.items()
+        if node_id not in target_ids
+        and _marquez_node_id_is_dataset_in_namespace(node_id, namespace=namespace)
+    ]
+    return max(upstream_dataset_depths, default=0)
+
+
+def _marquez_graph_target_dataset_ids(
+    payload: Mapping[str, Any],
+    context: ObservabilityContext,
+    *,
+    namespace: str,
+) -> set[str]:
+    return {
+        node_id
+        for node_id in _marquez_graph_node_ids(payload)
+        if _marquez_node_id_is_dataset_in_namespace(node_id, namespace=namespace)
+        and _contains_value(node_id, context.table or "")
+    }
+
+
+def _marquez_graph_adjacency(
+    payload: Mapping[str, Any],
+    node_ids: set[str],
+) -> dict[str, set[str]]:
+    adjacency: dict[str, set[str]] = {node_id: set() for node_id in node_ids}
+    for origin, destination in _marquez_graph_edges(payload):
+        if origin not in node_ids or destination not in node_ids:
+            continue
+        adjacency[origin].add(destination)
+        adjacency[destination].add(origin)
+    return adjacency
+
+
+def _marquez_graph_distances(
+    start_ids: set[str],
+    adjacency: Mapping[str, set[str]],
+) -> dict[str, int]:
+    distances = {node_id: 0 for node_id in start_ids if node_id in adjacency}
+    frontier = list(distances)
+    while frontier:
+        current = frontier.pop(0)
+        for neighbor in adjacency[current]:
+            if neighbor in distances:
+                continue
+            distances[neighbor] = distances[current] + 1
+            frontier.append(neighbor)
+    return distances
+
+
+def _marquez_node_id_is_dataset_in_namespace(
+    node_id: str,
+    *,
+    namespace: str,
+) -> bool:
+    return node_id.lower().startswith(f"dataset:{namespace}:".lower())
+
+
+def _marquez_graph_node_ids(payload: Mapping[str, Any]) -> set[str]:
+    graph = payload.get("graph")
+    if isinstance(graph, Mapping):
+        nodes = graph.get("nodes")
+        if isinstance(nodes, list):
+            return {
+                str(node.get("id") or node.get("name"))
+                for node in nodes
+                if isinstance(node, Mapping) and (node.get("id") or node.get("name"))
+            }
+    if isinstance(graph, list):
+        return {
+            str(node.get("id") or node.get("name"))
+            for node in graph
+            if isinstance(node, Mapping) and (node.get("id") or node.get("name"))
+        }
+    return set()
+
+
+def _marquez_graph_edges(payload: Mapping[str, Any]) -> set[tuple[str, str]]:
+    graph = payload.get("graph")
+    if isinstance(graph, list):
+        return _marquez_list_graph_edges(graph)
+    if not isinstance(graph, Mapping):
+        return set()
+    edges = graph.get("edges")
+    if not isinstance(edges, list):
+        return set()
+    return _marquez_edge_ids(edges)
+
+
+def _marquez_list_graph_edges(graph: Sequence[object]) -> set[tuple[str, str]]:
+    edge_ids: set[tuple[str, str]] = set()
+    for node in graph:
+        if not isinstance(node, Mapping):
+            continue
+        for key in ("inEdges", "outEdges"):
+            edges = node.get(key)
+            if not isinstance(edges, list):
+                continue
+            edge_ids.update(_marquez_edge_ids(edges))
+    return edge_ids
+
+
+def _marquez_edge_ids(edges: Sequence[object]) -> set[tuple[str, str]]:
+    edge_ids: set[tuple[str, str]] = set()
+    for edge in edges:
+        if not isinstance(edge, Mapping):
+            continue
+        origin = edge.get("origin") or edge.get("source") or edge.get("from")
+        destination = edge.get("destination") or edge.get("target") or edge.get("to")
+        if origin and destination:
+            edge_ids.add((str(origin), str(destination)))
+    return edge_ids
+
+
+def _marquez_node_id_is_job_or_run(node_id: str) -> bool:
+    lowered = node_id.lower()
+    return lowered.startswith(("job:", "run:")) or ":job:" in lowered or ":run:" in lowered
+
+
+def _marquez_node_id_is_job_or_run_in_namespace(
+    node_id: str,
+    *,
+    namespace: str,
+) -> bool:
+    lowered = node_id.lower()
+    namespace_prefixes = (f"job:{namespace}:".lower(), f"run:{namespace}:".lower())
+    return lowered.startswith(namespace_prefixes) or (
+        _marquez_node_id_is_job_or_run(node_id) and f":{namespace}:" in lowered
+    )
+
+
+def _marquez_requested_graph_depth(records: Sequence[EvidenceRecord]) -> str:
+    depths = [
+        int(record.payload["requested_depth"])
+        for record in records
+        if str(record.payload.get("requested_depth", "")).isdigit()
+    ]
+    return str(max(depths)) if depths else "unknown"
 
 
 def _trace_category_failures(
@@ -1156,6 +1614,26 @@ def _marquez_model_table_job_names(
     return tuple(sorted(job_names))
 
 
+def _marquez_dataset_names(
+    dataset_records: Sequence[EvidenceRecord],
+    context: ObservabilityContext,
+) -> tuple[str, ...]:
+    if not context.table:
+        return ()
+    names: set[str] = set()
+    for record in dataset_records:
+        if not _marquez_dataset_record_matches_context(
+            record,
+            context,
+            namespace=str(record.payload.get("namespace", "")),
+        ):
+            continue
+        name = record.payload.get("name") or record.payload.get("dataset_name")
+        if name:
+            names.add(str(name))
+    return tuple(sorted(names))
+
+
 def _marquez_model_record_with_parent_run(
     record: EvidenceRecord,
     *,
@@ -1191,6 +1669,42 @@ def _marquez_model_table_record_matches_context(
     if _parent_run_id_from_marquez_payload(record.payload) != context.run_id:
         return False
     return _marquez_record_is_completed(record)
+
+
+def _marquez_dataset_record_matches_context(
+    record: EvidenceRecord,
+    context: ObservabilityContext,
+    *,
+    namespace: str,
+) -> bool:
+    if not context.table:
+        return False
+    if str(record.payload.get("namespace", "")) != namespace:
+        return False
+    payload_text = _payload_text(record.payload)
+    return _contains_value(payload_text, context.table)
+
+
+def _marquez_lineage_graph_matches_context(
+    record: EvidenceRecord,
+    context: ObservabilityContext,
+    *,
+    namespace: str,
+) -> bool:
+    if not context.table:
+        return False
+    target_ids = _marquez_graph_target_dataset_ids(record.payload, context, namespace=namespace)
+    return bool(target_ids) and _marquez_graph_has_nodes(record.payload)
+
+
+def _marquez_graph_has_nodes(payload: Mapping[str, Any]) -> bool:
+    graph = payload.get("graph")
+    if isinstance(graph, Mapping):
+        nodes = graph.get("nodes")
+        if isinstance(nodes, list):
+            return bool(nodes)
+        return bool(graph)
+    return isinstance(graph, list) and bool(graph)
 
 
 def _marquez_record_is_completed(record: EvidenceRecord) -> bool:
@@ -1451,6 +1965,38 @@ def _marquez_job_records(
     return records
 
 
+def _marquez_dataset_records(
+    payload: Mapping[str, Any],
+    *,
+    namespace: str,
+) -> list[EvidenceRecord]:
+    datasets = payload.get("datasets", [])
+    if not isinstance(datasets, list):
+        return []
+    records: list[EvidenceRecord] = []
+    for dataset in datasets:
+        if not isinstance(dataset, Mapping):
+            continue
+        enriched = dict(dataset)
+        enriched.setdefault("namespace", namespace)
+        records.append(EvidenceRecord(payload=enriched))
+    return records
+
+
+def _marquez_lineage_graph_record(
+    payload: Mapping[str, Any],
+    *,
+    namespace: str,
+    dataset_name: str,
+    requested_depth: int,
+) -> EvidenceRecord:
+    enriched = dict(payload)
+    enriched.setdefault("namespace", namespace)
+    enriched.setdefault("dataset_name", dataset_name)
+    enriched.setdefault("requested_depth", requested_depth)
+    return EvidenceRecord(payload=enriched)
+
+
 def _dagster_run_record(run: Mapping[str, Any], *, product: str) -> EvidenceRecord:
     enriched = dict(run)
     enriched.setdefault("product", product)
@@ -1535,6 +2081,11 @@ def _decode_json_line(line: object) -> object:
 
 def _join_url(base_url: str, path: str) -> str:
     return f"{base_url.rstrip('/')}/{path.lstrip('/')}"
+
+
+def _response_status_code(response: object) -> int | None:
+    status_code = getattr(response, "status_code", None)
+    return int(status_code) if isinstance(status_code, int) else None
 
 
 def _blank_to_none(value: str | None) -> str | None:
