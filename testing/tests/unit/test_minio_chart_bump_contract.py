@@ -24,6 +24,7 @@ CHART_YAML = REPO_ROOT / "charts" / "floe-platform" / "Chart.yaml"
 CHART_LOCK = REPO_ROOT / "charts" / "floe-platform" / "Chart.lock"
 VALUES_TEST = REPO_ROOT / "charts" / "floe-platform" / "values-test.yaml"
 VALUES_DEMO = REPO_ROOT / "charts" / "floe-platform" / "values-demo.yaml"
+VALUES_DEV = REPO_ROOT / "charts" / "floe-platform" / "values-dev.yaml"
 VALUES_DEFAULTS = REPO_ROOT / "charts" / "floe-platform" / "values.yaml"
 DEMO_MANIFEST = REPO_ROOT / "demo" / "manifest.yaml"
 BUCKET_INIT_TEMPLATE = "templates/job-minio-bucket-init.yaml"
@@ -122,6 +123,12 @@ def values_defaults_config() -> dict[str, Any]:
 def values_demo_config() -> dict[str, Any]:
     """Parse values-demo.yaml into a dictionary."""
     return _load_yaml(VALUES_DEMO)
+
+
+@pytest.fixture(scope="module")
+def values_dev_config() -> dict[str, Any]:
+    """Parse values-dev.yaml into a dictionary."""
+    return _load_yaml(VALUES_DEV)
 
 
 @pytest.fixture(scope="module")
@@ -357,6 +364,28 @@ class TestDefaultBucketsFirstPath:
 
 class TestFallbackJobDefault:
     """Revised AC-7: values.yaml must expose the dormant fallback flag."""
+
+    @pytest.mark.requirement("ALPHA-HARDENING")
+    def test_minio_image_tags_are_pinned_for_default_and_dev_profiles(
+        self,
+        values_defaults_config: dict[str, Any],
+        values_dev_config: dict[str, Any],
+    ) -> None:
+        """MinIO must not use a floating latest tag in installable profiles."""
+        expected_tag = "RELEASE.2024-09-13T20-26-02Z"
+
+        for values_name, values_config in (
+            ("values.yaml", values_defaults_config),
+            ("values-dev.yaml", values_dev_config),
+        ):
+            minio_config = values_config.get("minio", {})
+            assert isinstance(minio_config, dict), f"{values_name} minio section is missing"
+            image = minio_config.get("image", {})
+            assert isinstance(image, dict), f"{values_name} minio.image section is missing"
+            assert image.get("tag") == expected_tag, (
+                f"{values_name} must pin minio.image.tag to {expected_tag!r}; "
+                f"found {image.get('tag')!r}."
+            )
 
     @pytest.mark.requirement("AC-7")
     def test_values_yaml_sets_fallback_job_default_false(

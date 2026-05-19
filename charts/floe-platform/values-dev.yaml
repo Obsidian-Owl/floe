@@ -134,7 +134,7 @@ postgresql:
 minio:
   enabled: true
   image:
-    tag: latest
+    tag: "RELEASE.2024-09-13T20-26-02Z"
   auth:
     rootUser: minioadmin
     rootPassword: "minio-dev-password-1234"

@@ -11,7 +11,17 @@ import yaml
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _TEMPLATE_PATH = _REPO_ROOT / "charts" / "floe-platform" / "templates" / "tests" / "_test-job.tpl"
 _VALUES_TEST_PATH = _REPO_ROOT / "charts" / "floe-platform" / "values-test.yaml"
+_PACKAGED_CHART_PATH = (
+    _REPO_ROOT / "charts" / "floe-platform" / "flux-artifacts" / "floe-platform.tgz"
+)
 _TEST_RUNNER_DOCKERFILE = _REPO_ROOT / "testing" / "Dockerfile"
+
+
+def _render_test_job_command(template: str) -> str:
+    return (
+        "source testing/ci/common.sh && "
+        f"FLOE_CHART_DIR={_PACKAGED_CHART_PATH} floe_render_test_job {template}"
+    )
 
 
 @pytest.mark.requirement("AC-5")
@@ -41,7 +51,7 @@ def test_rendered_e2e_job_uses_if_not_present_for_test_runner() -> None:
         [
             "bash",
             "-lc",
-            "source testing/ci/common.sh && floe_render_test_job tests/job-e2e.yaml",
+            _render_test_job_command("tests/job-e2e.yaml"),
         ],
         cwd=_REPO_ROOT,
         text=True,
@@ -68,6 +78,7 @@ def test_rendered_e2e_job_accepts_targeted_pytest_args_override() -> None:
             '"tests/e2e/test_observability.py::TestObservability::'
             'test_openlineage_events_in_marquez",'
             '"-q"]\' '
+            f"FLOE_CHART_DIR={_PACKAGED_CHART_PATH} "
             "floe_render_test_job tests/job-e2e.yaml",
         ],
         cwd=_REPO_ROOT,
