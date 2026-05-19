@@ -420,6 +420,7 @@ jobs:
   integration:
     name: Integration Test
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     needs: [lint, template, schema, security, kubeconform, unittest]
     if: github.ref == 'refs/heads/main'
     steps:
@@ -477,6 +478,64 @@ jobs:
             --pull-policy Never \
             > /tmp/floe-demo-image-values.yaml
           cat /tmp/floe-demo-image-values.yaml
+
+      - name: Pre-pull and load rendered chart images into Kind
+        run: |
+          set -euo pipefail
+          helm template floe-test charts/floe-platform \
+            --namespace floe-test \
+            --values charts/floe-platform/values-test.yaml \
+            --values /tmp/floe-demo-image-values.yaml \
+            > /tmp/floe-platform-rendered.yaml
+
+          uv run python - <<'PY' > /tmp/floe-chart-images.txt
+          from pathlib import Path
+
+          import yaml
+
+          rendered = Path("/tmp/floe-platform-rendered.yaml")
+          images: dict[str, None] = {}
+
+          def visit(node: object) -> None:
+              if isinstance(node, dict):
+                  for container_key in ("initContainers", "containers"):
+                      containers = node.get(container_key)
+                      if not isinstance(containers, list):
+                          continue
+                      for container in containers:
+                          if not isinstance(container, dict):
+                              continue
+                          image = container.get("image")
+                          if not isinstance(image, str) or not image:
+                              continue
+                          if container.get("imagePullPolicy") == "Never":
+                              continue
+                          images.setdefault(image, None)
+                  for key, value in node.items():
+                      if key in ("initContainers", "containers"):
+                          continue
+                      visit(value)
+              elif isinstance(node, list):
+                  for value in node:
+                      visit(value)
+
+          for document in yaml.safe_load_all(rendered.read_text()):
+              visit(document)
+
+          for image in images:
+              print(image)
+          PY
+          mapfile -t images < /tmp/floe-chart-images.txt
+
+          printf 'Preloading %d rendered chart images into Kind\n' "${#images[@]}"
+          if [[ ${#images[@]} -eq 0 ]]; then
+            echo "::warning::No pullable images found in rendered chart; verify helm template output" >&2
+          fi
+          for img in "${images[@]}"; do
+            echo "Preloading ${img}"
+            scripts/with-public-docker-config.sh docker pull "$img"
+            kind load docker-image "$img" --name helm-test
+          done
 
       - name: Install helm-diff plugin
         run: helm plugin install https://github.com/databus23/helm-diff --version v3.15.3 --verify=false

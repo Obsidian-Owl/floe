@@ -91,6 +91,47 @@ def test_helm_ci_has_integration_test_job() -> None:
 
 
 @pytest.mark.requirement("ALPHA-HARDENING")
+def test_helm_ci_preloads_rendered_chart_images_before_install() -> None:
+    """Helm integration must not rely on pod-time pulls from public registries."""
+    workflow = _load_workflow()
+    jobs = cast(Mapping[str, Mapping[str, Any]], workflow["jobs"])
+    integration = jobs["integration"]
+    steps = cast(list[Mapping[str, Any]], integration["steps"])
+    step_names = [str(step.get("name", "")) for step in steps]
+
+    preload_index = step_names.index("Pre-pull and load rendered chart images into Kind")
+    install_index = step_names.index("Install floe-platform chart with test values")
+    assert preload_index < install_index
+
+    preload_step = steps[preload_index]
+    run = preload_step.get("run", "")
+    assert isinstance(run, str)
+    assert "helm template floe-test charts/floe-platform" in run
+    assert "--values charts/floe-platform/values-test.yaml" in run
+    assert "--values /tmp/floe-demo-image-values.yaml" in run
+    assert "yaml.safe_load_all" in run
+    assert "uv run python - <<'PY' > /tmp/floe-chart-images.txt" in run
+    assert "mapfile -t images < /tmp/floe-chart-images.txt" in run
+    assert "mapfile -t images < <(" not in run
+    assert "imagePullPolicy" in run
+    assert "Never" in run
+    assert 'key in ("initContainers", "containers")' in run
+    assert "::warning::No pullable images found in rendered chart" in run
+    assert 'scripts/with-public-docker-config.sh docker pull "$img"' in run
+    assert 'kind load docker-image "$img" --name helm-test' in run
+
+
+@pytest.mark.requirement("ALPHA-HARDENING")
+def test_helm_ci_integration_job_has_explicit_timeout() -> None:
+    """Main-only Helm integration must fail boundedly when cluster startup stalls."""
+    workflow = _load_workflow()
+    jobs = cast(Mapping[str, Mapping[str, Any]], workflow["jobs"])
+    integration = jobs["integration"]
+
+    assert integration.get("timeout-minutes") == 45
+
+
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_helm_ci_render_preview_does_not_pipe_find_into_head() -> None:
     """Rendered YAML preview must not fail successful jobs with broken pipes."""
     workflow_text = WORKFLOW.read_text()
