@@ -25,6 +25,19 @@ from testing.fixtures.kubernetes import run_helm_template
 from testing.fixtures.polling import wait_for_condition
 
 
+def _iter_grafana_panels(panels: list[Any]) -> list[dict[str, Any]]:
+    """Return top-level and nested Grafana panels from a dashboard."""
+    expanded: list[dict[str, Any]] = []
+    for panel in panels:
+        if not isinstance(panel, dict):
+            continue
+        expanded.append(panel)
+        nested = panel.get("panels")
+        if isinstance(nested, list):
+            expanded.extend(_iter_grafana_panels(nested))
+    return expanded
+
+
 class TestDemoMode(IntegrationTestBase):
     """E2E tests validating demo mode deployment and functionality.
 
@@ -359,7 +372,7 @@ class TestDemoMode(IntegrationTestBase):
         - Helm chart renders Grafana dashboard ConfigMap
         - ConfigMap contains dashboard JSON definitions
         - Dashboard definitions are valid JSON
-        - Dashboards reference real data sources (Prometheus/Jaeger)
+        - Dashboards reference real data sources (Prometheus/Jaeger/Loki)
 
         Raises:
             AssertionError: If dashboard ConfigMap not found, invalid, or missing data sources.
@@ -418,12 +431,20 @@ class TestDemoMode(IntegrationTestBase):
                 "Grafana dashboards must contain panel definitions with queries."
             )
 
-            for panel in panels:
+            for panel in _iter_grafana_panels(panels):
                 datasource = panel.get("datasource")
                 if isinstance(datasource, dict):
                     datasource_type = datasource.get("type")
                     if isinstance(datasource_type, str):
                         datasource_types.add(datasource_type.lower())
+                for target in panel.get("targets", []):
+                    if not isinstance(target, dict):
+                        continue
+                    target_datasource = target.get("datasource")
+                    if isinstance(target_datasource, dict):
+                        datasource_type = target_datasource.get("type")
+                        if isinstance(datasource_type, str):
+                            datasource_types.add(datasource_type.lower())
 
         assert datasource_types, (
             "DASHBOARD GAP: Dashboard ConfigMap has no 'datasource' references. "
@@ -537,6 +558,7 @@ class TestDemoMode(IntegrationTestBase):
 
         project_root = Path(__file__).parent.parent.parent
         demo_dir = project_root / "demo"
+        demo_dir_resolved = demo_dir.resolve()
 
         # Expected products
         products = ["customer-360", "iot-telemetry", "financial-risk"]
@@ -568,6 +590,9 @@ class TestDemoMode(IntegrationTestBase):
 
         for product in products:
             product_dir = demo_dir / product
+            assert product_dir.resolve().parent == demo_dir_resolved, (
+                f"Invalid product path outside demo directory: {product_dir}"
+            )
 
             # Verify dbt_project.yml has unique project name
             dbt_project_path = product_dir / "dbt_project.yml"
