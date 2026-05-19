@@ -101,6 +101,7 @@ def test_marquez_helper_uses_api_endpoints_and_graph_node_helpers() -> None:
     """Marquez proof comes from namespace/job/run/dataset/lineage APIs, not root UI."""
     client = _FakeClient(
         {
+            "http://marquez/api/v1/namespaces/customer-360": {"name": "customer-360"},
             "http://marquez/api/v1/namespaces/customer-360/jobs/customer-360/runs": {
                 "runs": [
                     {
@@ -130,7 +131,26 @@ def test_marquez_helper_uses_api_endpoints_and_graph_node_helpers() -> None:
                     }
                 ]
             },
-            "http://marquez/api/v1/lineage": {"graph": []},
+            "http://marquez/api/v1/lineage": {
+                "depth": 3,
+                "graph": {
+                    "nodes": [
+                        {"id": "dataset:customer-360:stg_customers", "type": "DATASET"},
+                        {"id": "job:customer-360:mart_customer_360", "type": "JOB"},
+                        {"id": "dataset:customer-360:mart_customer_360", "type": "DATASET"},
+                    ],
+                    "edges": [
+                        {
+                            "origin": "dataset:customer-360:stg_customers",
+                            "destination": "job:customer-360:mart_customer_360",
+                        },
+                        {
+                            "origin": "job:customer-360:mart_customer_360",
+                            "destination": "dataset:customer-360:mart_customer_360",
+                        },
+                    ],
+                },
+            },
         }
     )
 
@@ -156,7 +176,7 @@ def test_marquez_helper_uses_api_endpoints_and_graph_node_helpers() -> None:
     assert "http://marquez/api/v1/namespaces/customer-360/datasets" in requested_urls
     assert (
         "http://marquez/api/v1/lineage",
-        {"nodeId": node_id, "depth": "2"},
+        {"nodeId": node_id, "depth": "3"},
     ) in client.requests
 
 

@@ -27,6 +27,39 @@ from testing.ci.customer360_observability import (
 
 e2e_conftest = cast(Any, importlib.import_module("tests.e2e.conftest"))
 
+_CUSTOMER360_DATASET = "customer_360.main.mart_customer_360"
+_CUSTOMER360_UPSTREAM_DATASET = "customer_360.main.stg_customers"
+_CUSTOMER360_DATASET_NODE = f"dataset:customer-360:{_CUSTOMER360_DATASET}"
+_CUSTOMER360_UPSTREAM_NODE = f"dataset:customer-360:{_CUSTOMER360_UPSTREAM_DATASET}"
+_CUSTOMER360_JOB_NODE = "job:customer-360:model.customer_360.mart_customer_360"
+
+
+def _marquez_dataset_payload() -> JsonObject:
+    return {
+        "datasets": [
+            {
+                "namespace": "customer-360",
+                "name": _CUSTOMER360_DATASET,
+            }
+        ]
+    }
+
+
+def _marquez_lineage_graph_payload() -> JsonObject:
+    return {
+        "graph": {
+            "nodes": [
+                {"id": _CUSTOMER360_UPSTREAM_NODE},
+                {"id": _CUSTOMER360_JOB_NODE},
+                {"id": _CUSTOMER360_DATASET_NODE},
+            ],
+            "edges": [
+                {"origin": _CUSTOMER360_UPSTREAM_NODE, "destination": _CUSTOMER360_JOB_NODE},
+                {"origin": _CUSTOMER360_JOB_NODE, "destination": _CUSTOMER360_DATASET_NODE},
+            ],
+        }
+    }
+
 
 def test_trigger_lineage_run_waits_for_marquez_after_launch_timeout() -> None:
     """Dagster launch timeouts may still enqueue a run; wait for lineage proof."""
@@ -646,6 +679,7 @@ def test_customer360_marquez_helper_queries_lineage_by_namespace_job_and_run() -
     """Marquez helper accepts product-run and model/table evidence as separate records."""
     client = _FakeClient(
         {
+            "http://marquez/api/v1/namespaces/customer-360": {"name": "customer-360"},
             "http://marquez/api/v1/namespaces/customer-360/jobs/customer-360/runs": {
                 "runs": [
                     {
@@ -684,6 +718,8 @@ def test_customer360_marquez_helper_queries_lineage_by_namespace_job_and_run() -
                     }
                 ]
             },
+            "http://marquez/api/v1/namespaces/customer-360/datasets": (_marquez_dataset_payload()),
+            "http://marquez/api/v1/lineage": _marquez_lineage_graph_payload(),
         }
     )
 
@@ -697,6 +733,7 @@ def test_customer360_marquez_helper_queries_lineage_by_namespace_job_and_run() -
 
     assert result.status is EvidenceStatus.PASS
     assert client.requests == [
+        ("http://marquez/api/v1/namespaces/customer-360", None),
         (
             "http://marquez/api/v1/namespaces/customer-360/jobs/customer-360/runs",
             None,
@@ -704,18 +741,15 @@ def test_customer360_marquez_helper_queries_lineage_by_namespace_job_and_run() -
         ("http://marquez/api/v1/namespaces/customer-360/jobs", None),
         ("http://marquez/api/v1/namespaces/customer-360/datasets", None),
         (
-            "http://marquez/api/v1/lineage",
-            {
-                "nodeId": "dataset:customer-360:mart_customer_360",
-                "depth": "2",
-            },
-        ),
-        (
             (
                 "http://marquez/api/v1/namespaces/customer-360/jobs/"
                 "model.customer_360.mart_customer_360/runs"
             ),
             None,
+        ),
+        (
+            "http://marquez/api/v1/lineage",
+            {"nodeId": _CUSTOMER360_DATASET_NODE, "depth": "3"},
         ),
     ]
 
@@ -724,6 +758,7 @@ def test_customer360_marquez_helper_rejects_namespace_only_model_jobs() -> None:
     """Namespace job existence alone is not fresh model/table lineage evidence."""
     client = _FakeClient(
         {
+            "http://marquez/api/v1/namespaces/customer-360": {"name": "customer-360"},
             "http://marquez/api/v1/namespaces/customer-360/jobs/customer-360/runs": {
                 "runs": [
                     {
@@ -751,7 +786,7 @@ def test_customer360_marquez_helper_rejects_namespace_only_model_jobs() -> None:
         client=cast(httpx.Client, client),
     )
 
-    assert result.status is EvidenceStatus.NO_FRESH_EVIDENCE
+    assert result.status is EvidenceStatus.CONTRACT_GAP
     assert "model/table" in result.message
 
 
@@ -759,6 +794,7 @@ def test_customer360_marquez_helper_uses_run_facets_for_parent_link() -> None:
     """Model runs without inline facets can prove lineage via Marquez run facets."""
     client = _FakeClient(
         {
+            "http://marquez/api/v1/namespaces/customer-360": {"name": "customer-360"},
             "http://marquez/api/v1/namespaces/customer-360/jobs/customer-360/runs": {
                 "runs": [
                     {
@@ -793,6 +829,8 @@ def test_customer360_marquez_helper_uses_run_facets_for_parent_link() -> None:
                     }
                 }
             },
+            "http://marquez/api/v1/namespaces/customer-360/datasets": (_marquez_dataset_payload()),
+            "http://marquez/api/v1/lineage": _marquez_lineage_graph_payload(),
         }
     )
 
