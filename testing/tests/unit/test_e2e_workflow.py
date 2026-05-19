@@ -23,7 +23,7 @@ SETUP_PYTHON_SHA = "a309ff8b426b58ec0e2a45f0f869d46889d02405"  # pragma: allowli
 SETUP_UV_SHA = "08807647e7069bb48b6ef5acd8ec9567f424441b"  # pragma: allowlist secret
 SETUP_HELM_SHA = "dda3372f752e03dde6b3237bc9431cdc2f7a02a2"  # pragma: allowlist secret
 KIND_ACTION_SHA = "ef37e7f390d99f746eb8b610417061a60e82a6cc"  # pragma: allowlist secret
-UPLOAD_ARTIFACT_SHA = "ea165f8d65b6e75b540449e92b4886f43607fa02"  # pragma: allowlist secret
+UPLOAD_ARTIFACT_SHA = "b7c566a772e6b6bfb58ed0dc250532a479d7789f"  # pragma: allowlist secret
 
 
 def _load_workflow() -> dict[object, Any]:

@@ -11,20 +11,34 @@ OLD_ACTION_PINS = {
     "actions/checkout": "34e114876b0b11c390a56381ad16ebd13914f8d5",  # pragma: allowlist secret
     "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065",  # pragma: allowlist secret
     "astral-sh/setup-uv": "e4db8464a088ece1b920f60402e813ea4de65b8f",  # pragma: allowlist secret
+    "actions/download-artifact": (
+        "d3f86a106a0bac45b974a628896c90dbdf5c8093"  # pragma: allowlist secret
+    ),
+    "actions/upload-artifact": (
+        "ea165f8d65b6e75b540449e92b4886f43607fa02"  # pragma: allowlist secret
+    ),
     "azure/setup-helm": "1a275c3b69536ee54be43f2070a358922e12c8d4",  # pragma: allowlist secret
+    "CodSpeedHQ/action": "0d7de549485db8284c0b87a0d2c0dd871097e641",  # pragma: allowlist secret
     "helm/kind-action": "a1b0e391336a6ee6713a0583f8c6240d70863de3",  # pragma: allowlist secret
 }
 
 NODE24_ACTION_PINS = {
     "actions/checkout": "de0fac2e4500dabe0009e67214ff5f5447ce83dd",  # pragma: allowlist secret
     "actions/deploy-pages": "cd2ce8fcbc39b97be8ca5fce6e763baed58fa128",  # pragma: allowlist secret
+    "actions/download-artifact": (
+        "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"  # pragma: allowlist secret
+    ),
     "actions/setup-node": "48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e",  # pragma: allowlist secret
     "actions/setup-python": "a309ff8b426b58ec0e2a45f0f869d46889d02405",  # pragma: allowlist secret
+    "actions/upload-artifact": (
+        "b7c566a772e6b6bfb58ed0dc250532a479d7789f"  # pragma: allowlist secret
+    ),
     "actions/upload-pages-artifact": (
         "fc324d3547104276b827a68afc52ff2a11cc49c9"  # pragma: allowlist secret
     ),
     "astral-sh/setup-uv": "08807647e7069bb48b6ef5acd8ec9567f424441b",  # pragma: allowlist secret
     "Azure/setup-helm": "dda3372f752e03dde6b3237bc9431cdc2f7a02a2",  # pragma: allowlist secret
+    "CodSpeedHQ/action": "e736f0d2aeb36da38e9f08eca4dff7967408d154",  # pragma: allowlist secret
     "helm/kind-action": "ef37e7f390d99f746eb8b610417061a60e82a6cc",  # pragma: allowlist secret
 }
 
@@ -90,3 +104,12 @@ def test_setup_helm_action_owner_uses_canonical_case() -> None:
             lowercase_setup_helm.append(f"{workflow}:{line_number}: {action}@{ref}")
 
     assert lowercase_setup_helm == []
+
+
+@pytest.mark.requirement("github-actions-node24")
+def test_codspeed_forces_node24_for_transitive_composite_actions() -> None:
+    """CodSpeed wraps actions/cache, so the workflow must force Node 24 execution."""
+    codspeed_workflow = WORKFLOWS_DIR / "codspeed.yml"
+    workflow_text = codspeed_workflow.read_text()
+
+    assert 'FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"' in workflow_text
