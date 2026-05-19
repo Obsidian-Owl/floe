@@ -284,7 +284,7 @@ class TestPypiPublishWorkflow:
         workflow_text = PREPARE_RELEASE_WORKFLOW.read_text(encoding="utf-8")
 
         assert "release-metadata/release-metadata.json" in workflow_text
-        assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in workflow_text
+        assert "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f" in workflow_text
         assert "RELEASE_VERSION: ${{ needs.resolve-candidate.outputs.python_version }}" in (
             workflow_text
         )

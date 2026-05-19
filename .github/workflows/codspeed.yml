@@ -17,6 +17,9 @@ env:
   # See: https://codspeed.io/docs/instruments/cpu
   PYTHON_VERSION_DEFAULT: "3.12"
   UV_CACHE_DIR: /tmp/.uv-cache
+  # CodSpeed's composite action currently wraps actions/cache. Force nested
+  # JavaScript actions onto Node 24 until CodSpeed pins a Node 24 cache action.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   codspeed:
@@ -41,7 +44,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@0d7de549485db8284c0b87a0d2c0dd871097e641  # v4
+        uses: CodSpeedHQ/action@e736f0d2aeb36da38e9f08eca4dff7967408d154 # v4.8.2
         with:
           # CPU simulation for consistent comparisons with main branch
           # Python 3.12+ enables execution profiles (flamegraphs)
