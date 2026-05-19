@@ -12,15 +12,30 @@ This module validates the complete demo experience:
 
 from __future__ import annotations
 
+import json
 import subprocess
 from typing import Any
 
 import httpx
 import pytest
+import yaml
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
 from testing.fixtures.kubernetes import run_helm_template
 from testing.fixtures.polling import wait_for_condition
+
+
+def _iter_grafana_panels(panels: list[Any]) -> list[dict[str, Any]]:
+    """Return top-level and nested Grafana panels from a dashboard."""
+    expanded: list[dict[str, Any]] = []
+    for panel in panels:
+        if not isinstance(panel, dict):
+            continue
+        expanded.append(panel)
+        nested = panel.get("panels")
+        if isinstance(nested, list):
+            expanded.extend(_iter_grafana_panels(nested))
+    return expanded
 
 
 class TestDemoMode(IntegrationTestBase):
@@ -357,7 +372,7 @@ class TestDemoMode(IntegrationTestBase):
         - Helm chart renders Grafana dashboard ConfigMap
         - ConfigMap contains dashboard JSON definitions
         - Dashboard definitions are valid JSON
-        - Dashboards reference real data sources (Prometheus/Jaeger)
+        - Dashboards reference real data sources (Prometheus/Jaeger/Loki)
 
         Raises:
             AssertionError: If dashboard ConfigMap not found, invalid, or missing data sources.
@@ -366,49 +381,78 @@ class TestDemoMode(IntegrationTestBase):
 
         project_root = Path(__file__).parent.parent.parent
         chart_path = project_root / "charts" / "floe-platform"
+        demo_values_path = chart_path / "values-demo.yaml"
 
-        result = run_helm_template("test-release", chart_path, timeout=60)
+        result = run_helm_template(
+            "test-release",
+            chart_path,
+            values_path=demo_values_path,
+            timeout=60,
+        )
 
         assert result.returncode == 0, (
             f"Helm template rendering failed: {result.returncode}\nstderr: {result.stderr}"
         )
 
-        rendered_output = result.stdout
-
-        # Verify Grafana dashboard ConfigMap exists
-        assert "grafana-dashboards" in rendered_output.lower(), (
-            "Grafana dashboard ConfigMap not found in Helm templates"
+        rendered_docs = [
+            doc
+            for doc in yaml.safe_load_all(result.stdout)
+            if isinstance(doc, dict) and doc.get("kind") == "ConfigMap"
+        ]
+        dashboard_config = next(
+            (
+                doc
+                for doc in rendered_docs
+                if doc.get("metadata", {}).get("labels", {}).get("grafana_dashboard") == "1"
+            ),
+            None,
+        )
+        assert dashboard_config is not None, (
+            "Grafana dashboard ConfigMap not found in demo Helm templates"
         )
 
-        # Verify ConfigMap has kind: ConfigMap
-        assert "kind: ConfigMap" in rendered_output, "No ConfigMap resource found in Helm templates"
-
-        # Verify dashboard content marker (JSON structure)
-        # Grafana dashboards typically contain "dashboard" and "panels" keys
-        has_dashboard_content = (
-            '"dashboard"' in rendered_output
-            or '"panels"' in rendered_output
-            or "floe-platform-dashboard" in rendered_output.lower()
+        dashboard_data = dashboard_config.get("data", {})
+        assert isinstance(dashboard_data, dict), (
+            "DASHBOARD GAP: Dashboard ConfigMap data must be a mapping"
         )
-
-        assert has_dashboard_content, (
+        dashboard_json = {
+            name: content for name, content in dashboard_data.items() if name.endswith(".json")
+        }
+        assert dashboard_json, (
             "Dashboard ConfigMap exists but appears to lack dashboard definitions"
         )
 
-        # Validate dashboard JSON contains actual panel definitions
-        assert '"panels"' in rendered_output, (
-            "DASHBOARD GAP: Dashboard ConfigMap has no 'panels' key. "
-            "Grafana dashboards must contain panel definitions with queries."
-        )
+        datasource_types: set[str] = set()
+        for name, content in dashboard_json.items():
+            parsed = json.loads(content)
+            panels = parsed.get("panels", [])
+            assert panels, (
+                f"DASHBOARD GAP: {name} has no 'panels' entries. "
+                "Grafana dashboards must contain panel definitions with queries."
+            )
 
-        # Verify dashboard references real data sources (not dummy)
-        assert "datasource" in rendered_output.lower(), (
+            for panel in _iter_grafana_panels(panels):
+                datasource = panel.get("datasource")
+                if isinstance(datasource, dict):
+                    datasource_type = datasource.get("type")
+                    if isinstance(datasource_type, str):
+                        datasource_types.add(datasource_type.lower())
+                for target in panel.get("targets", []):
+                    if not isinstance(target, dict):
+                        continue
+                    target_datasource = target.get("datasource")
+                    if isinstance(target_datasource, dict):
+                        datasource_type = target_datasource.get("type")
+                        if isinstance(datasource_type, str):
+                            datasource_types.add(datasource_type.lower())
+
+        assert datasource_types, (
             "DASHBOARD GAP: Dashboard ConfigMap has no 'datasource' references. "
-            "Grafana dashboards must reference Prometheus or Jaeger data sources."
+            "Grafana dashboards must reference real data sources."
         )
-        assert "prometheus" in rendered_output.lower() or "jaeger" in rendered_output.lower(), (
+        assert datasource_types & {"prometheus", "jaeger", "loki"}, (
             "DASHBOARD GAP: Grafana dashboards exist but don't reference "
-            "Prometheus or Jaeger data sources. Dashboards may show no data."
+            f"Prometheus, Jaeger, or Loki data sources. Found: {sorted(datasource_types)}"
         )
 
     @pytest.mark.e2e
@@ -514,6 +558,7 @@ class TestDemoMode(IntegrationTestBase):
 
         project_root = Path(__file__).parent.parent.parent
         demo_dir = project_root / "demo"
+        demo_dir_resolved = demo_dir.resolve()
 
         # Expected products
         products = ["customer-360", "iot-telemetry", "financial-risk"]
@@ -545,6 +590,9 @@ class TestDemoMode(IntegrationTestBase):
 
         for product in products:
             product_dir = demo_dir / product
+            assert product_dir.resolve().parent == demo_dir_resolved, (
+                f"Invalid product path outside demo directory: {product_dir}"
+            )
 
             # Verify dbt_project.yml has unique project name
             dbt_project_path = product_dir / "dbt_project.yml"
