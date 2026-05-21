@@ -167,6 +167,10 @@ class CompositionResolver:
                     )
                 )
 
+        # API families, datasource engines, and artifact transports describe
+        # semantic runtime/publication capabilities. They are carried in the
+        # composition vocabulary here, but resolved deployment bindings own
+        # provider-specific matching outside this storage/catalog validation.
         return issues
 
     def _validate_ingestion(

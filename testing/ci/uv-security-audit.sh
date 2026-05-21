@@ -10,7 +10,10 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # - GHSA-w8v5-vhqr-4h9v: diskcache 5.6.3 has no patched version as of 2026-04-28.
 #   Agent-memory is a devtool-only optional component, not installed in runtime
 #   platform images. Revisit before beta or when a patched release exists.
-IGNORE_VULNS="${UV_SECURE_IGNORE_VULNS:-GHSA-w8v5-vhqr-4h9v}"
+# - PYSEC-2025-183: PyJWT 2.12.1 is used by the identity plugin and pulled
+#   transitively by sigstore; uv-secure reports no patched version. Keep the
+#   exception narrow and remove when a fixed release is available.
+IGNORE_VULNS="${UV_SECURE_IGNORE_VULNS:-GHSA-w8v5-vhqr-4h9v,PYSEC-2025-183}"
 MAX_ATTEMPTS="${UV_SECURE_MAX_ATTEMPTS:-3}"
 PIP_AUDIT_IGNORE_VULNS="${PIP_AUDIT_IGNORE_VULNS:-${IGNORE_VULNS},GHSA-5j53-63w8-8625,GHSA-7gcm-g887-7qv7,GHSA-gc5v-m9x4-r6x2}"
 

@@ -1343,6 +1343,21 @@ class SemanticPublicationBinding(BaseModel):
         _assert_secret_free_config_map(value, "semantic.publication.config")
         return value
 
+    @model_validator(mode="after")
+    def validate_policy_consistency(self) -> SemanticPublicationBinding:
+        """Ensure publication enablement and policy do not contradict."""
+        if self.enabled and self.policy == "disabled":
+            raise ValueError(
+                "semantic publication policy contradicts enabled: "
+                "enabled publication cannot use policy='disabled'"
+            )
+        if not self.enabled and self.policy in {"publish-on-change", "publish-on-deploy"}:
+            raise ValueError(
+                "semantic publication policy contradicts enabled: "
+                "disabled publication cannot use an active publication policy"
+            )
+        return self
+
     @field_validator("env_refs")
     @classmethod
     def validate_env_refs(cls, value: dict[str, str]) -> dict[str, str]:

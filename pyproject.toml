@@ -271,7 +271,16 @@ skips = [
 # requests.get()/Session for HTTP calls. Fix version 2.33.0 is blocked by
 # datacontract-cli which pins requests<2.33 (all versions through 0.11.7).
 # Remove when datacontract-cli releases a version allowing requests>=2.33.
-ignore_vulnerabilities = ["GHSA-5j53-63w8-8625", "GHSA-7gcm-g887-7qv7", "GHSA-gc5v-m9x4-r6x2"]
+#
+# PYSEC-2025-183: PyJWT 2.12.1 is used by the identity plugin and pulled
+# transitively by sigstore; uv-secure reports no patched version. Remove when a
+# fixed release is available.
+ignore_vulnerabilities = [
+    "GHSA-5j53-63w8-8625",
+    "GHSA-7gcm-g887-7qv7",
+    "GHSA-gc5v-m9x4-r6x2",
+    "PYSEC-2025-183",
+]
 
 [tool.coverage.run]
 source = ["packages/floe-core/src"]

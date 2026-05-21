@@ -24,6 +24,7 @@ from floe_core.schemas.compiled_artifacts import (
     PluginRef,
     ResolvedPlugins,
     SemanticDeploymentBinding,
+    SemanticPublicationBinding,
 )
 from pydantic import ValidationError
 
@@ -181,6 +182,49 @@ class TestSemanticDeploymentDesiredStateContract:
             )
 
         assert "raw credential material" in str(exc_info.value)
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    @pytest.mark.parametrize(
+        "publication",
+        [
+            SemanticPublicationBinding(enabled=False, policy="disabled"),
+            SemanticPublicationBinding(enabled=False, policy="manual"),
+            SemanticPublicationBinding(enabled=True, policy="manual"),
+            SemanticPublicationBinding(enabled=True, policy="publish-on-change"),
+            SemanticPublicationBinding(enabled=True, policy="publish-on-deploy"),
+        ],
+    )
+    def test_semantic_publication_accepts_consistent_policy(
+        self,
+        publication: SemanticPublicationBinding,
+    ) -> None:
+        """Contract: publication enabled flag and policy agree."""
+        binding = SemanticDeploymentBinding(
+            provider="semantic-provider",
+            publication=publication,
+        )
+
+        assert binding.publication == publication
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    @pytest.mark.parametrize(
+        ("enabled", "policy"),
+        [
+            (False, "publish-on-change"),
+            (False, "publish-on-deploy"),
+            (True, "disabled"),
+        ],
+    )
+    def test_semantic_publication_rejects_contradictory_policy(
+        self,
+        enabled: bool,
+        policy: str,
+    ) -> None:
+        """Contract: disabled publication cannot request active publication."""
+        with pytest.raises(ValidationError) as exc_info:
+            SemanticPublicationBinding(enabled=enabled, policy=policy)  # type: ignore[arg-type]
+
+        assert "semantic publication policy contradicts enabled" in str(exc_info.value)
 
     @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
     @pytest.mark.parametrize(
