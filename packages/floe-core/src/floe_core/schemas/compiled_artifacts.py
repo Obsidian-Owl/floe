@@ -440,18 +440,12 @@ def _assert_json_compatible_fragment(value: Any, path: str) -> None:
 def _assert_env_var_name_map(value: dict[str, str], path: str) -> None:
     """Ensure a map's values are environment variable names, not inline values.
 
-    Single-word names matching credential keywords, such as ``TOKEN`` or
-    ``PASSWORD``, are intentionally rejected so raw secret values cannot pass
-    by choosing a syntactically valid environment variable name.
+    Secret-like names such as ``TOKEN`` or ``PASSWORD`` are valid because this
+    field stores references to environment variables, not the secret values.
     """
     for key, env_name in value.items():
         if _ENV_VAR_NAME_PATTERN.fullmatch(env_name) is None:
             msg = f"{path}.{key} must be an environment variable name"
-            raise ValueError(msg)
-        if env_name.lower() in _SECRET_VALUE_MARKERS or (
-            _DEFAULT_ADMIN_CREDENTIAL_PATTERN.fullmatch(env_name.lower()) is not None
-        ):
-            msg = f"{path}.{key} looks like raw credential material"
             raise ValueError(msg)
 
 
@@ -1423,7 +1417,19 @@ class SemanticDeploymentBinding(BaseModel):
     @model_validator(mode="after")
     def validate_internal_references(self) -> SemanticDeploymentBinding:
         """Ensure semantic bindings reference declared deployment fragments."""
-        service_endpoint_names = {endpoint.name for endpoint in self.service_endpoints}
+        service_endpoint_names: set[str] = set()
+        duplicate_service_endpoint_names: set[str] = set()
+        for endpoint in self.service_endpoints:
+            if endpoint.name in service_endpoint_names:
+                duplicate_service_endpoint_names.add(endpoint.name)
+            service_endpoint_names.add(endpoint.name)
+        if duplicate_service_endpoint_names:
+            duplicate_list = sorted(duplicate_service_endpoint_names)
+            raise ValueError(
+                "semantic.service_endpoints.name contains duplicate service "
+                f"endpoint names: {duplicate_list}"
+            )
+
         for api in self.apis:
             if api.endpoint_name not in service_endpoint_names:
                 raise ValueError(
@@ -1431,7 +1437,19 @@ class SemanticDeploymentBinding(BaseModel):
                     f"{api.endpoint_name!r}"
                 )
 
-        artifact_names = {artifact.name for artifact in self.artifacts}
+        artifact_names: set[str] = set()
+        duplicate_artifact_names: set[str] = set()
+        for artifact in self.artifacts:
+            if artifact.name in artifact_names:
+                duplicate_artifact_names.add(artifact.name)
+            artifact_names.add(artifact.name)
+        if duplicate_artifact_names:
+            duplicate_list = sorted(duplicate_artifact_names)
+            raise ValueError(
+                "semantic.artifacts.name contains duplicate semantic artifact "
+                f"names: {duplicate_list}"
+            )
+
         if self.publication is not None:
             for artifact_name in self.publication.artifact_names:
                 if artifact_name not in artifact_names:

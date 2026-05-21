@@ -167,6 +167,22 @@ class TestSemanticDeploymentDesiredStateContract:
         assert "environment variable name" in str(exc_info.value)
 
     @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    def test_semantic_env_refs_accept_standard_secret_named_env_vars(self) -> None:
+        """Contract: env refs may use standard secret-like env var names."""
+        binding = SemanticDeploymentBinding(
+            provider="semantic-provider",
+            env_refs={
+                "api_token": "TOKEN",  # pragma: allowlist secret
+                "password": "PASSWORD",  # pragma: allowlist secret
+            },
+        )
+
+        assert binding.env_refs == {
+            "api_token": "TOKEN",
+            "password": "PASSWORD",  # pragma: allowlist secret
+        }
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
     def test_semantic_config_maps_reject_raw_secret_values(self) -> None:
         """Contract: config maps carry desired configuration, not raw credentials."""
         with pytest.raises(ValidationError) as exc_info:
@@ -244,6 +260,21 @@ class TestSemanticDeploymentDesiredStateContract:
         assert "unknown service endpoint" in str(exc_info.value)
 
     @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    def test_semantic_service_endpoint_names_must_be_unique(self) -> None:
+        """Contract: service endpoint references resolve to one endpoint."""
+        with pytest.raises(ValidationError) as exc_info:
+            SemanticDeploymentBinding(
+                provider="semantic-provider",
+                service_endpoints=[
+                    {"name": "internal", "url": "https://semantic.internal"},
+                    {"name": "internal", "url": "https://semantic-alt.internal"},
+                ],
+            )
+
+        assert "semantic.service_endpoints.name" in str(exc_info.value)
+        assert "duplicate" in str(exc_info.value)
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
     def test_semantic_api_endpoint_name_accepts_declared_service_endpoint(self) -> None:
         """Contract: API bindings accept known service endpoint names."""
         binding = SemanticDeploymentBinding(
@@ -280,6 +311,29 @@ class TestSemanticDeploymentDesiredStateContract:
 
         assert "semantic.publication.artifact_names" in str(exc_info.value)
         assert "unknown semantic artifact" in str(exc_info.value)
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    def test_semantic_artifact_names_must_be_unique(self) -> None:
+        """Contract: publication references resolve to one artifact."""
+        with pytest.raises(ValidationError) as exc_info:
+            SemanticDeploymentBinding(
+                provider="semantic-provider",
+                artifacts=[
+                    {
+                        "name": "semantic-models",
+                        "mount_path": "/var/lib/floe/semantic",
+                        "format": "semantic-model",
+                    },
+                    {
+                        "name": "semantic-models",
+                        "mount_path": "/var/lib/floe/semantic-alt",
+                        "format": "semantic-model",
+                    },
+                ],
+            )
+
+        assert "semantic.artifacts.name" in str(exc_info.value)
+        assert "duplicate" in str(exc_info.value)
 
     @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
     def test_semantic_publication_artifact_names_accept_declared_artifacts(self) -> None:
