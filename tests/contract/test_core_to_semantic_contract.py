@@ -227,6 +227,83 @@ class TestSemanticDeploymentDesiredStateContract:
         assert "semantic publication policy contradicts enabled" in str(exc_info.value)
 
     @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    def test_semantic_api_endpoint_name_must_reference_service_endpoint(self) -> None:
+        """Contract: API bindings reference declared service endpoints."""
+        with pytest.raises(ValidationError) as exc_info:
+            SemanticDeploymentBinding(
+                provider="semantic-provider",
+                service_endpoints=[
+                    {"name": "internal", "url": "https://semantic.internal"},
+                ],
+                apis=[
+                    {"family": "sql", "endpoint_name": "missing"},
+                ],
+            )
+
+        assert "semantic.api.endpoint_name" in str(exc_info.value)
+        assert "unknown service endpoint" in str(exc_info.value)
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    def test_semantic_api_endpoint_name_accepts_declared_service_endpoint(self) -> None:
+        """Contract: API bindings accept known service endpoint names."""
+        binding = SemanticDeploymentBinding(
+            provider="semantic-provider",
+            service_endpoints=[
+                {"name": "internal", "url": "https://semantic.internal"},
+            ],
+            apis=[
+                {"family": "sql", "endpoint_name": "internal"},
+            ],
+        )
+
+        assert binding.apis[0].endpoint_name == "internal"
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    def test_semantic_publication_artifact_names_must_reference_artifacts(self) -> None:
+        """Contract: publication artifact names reference declared artifacts."""
+        with pytest.raises(ValidationError) as exc_info:
+            SemanticDeploymentBinding(
+                provider="semantic-provider",
+                artifacts=[
+                    {
+                        "name": "semantic-models",
+                        "mount_path": "/var/lib/floe/semantic",
+                        "format": "semantic-model",
+                    }
+                ],
+                publication=SemanticPublicationBinding(
+                    enabled=True,
+                    policy="publish-on-change",
+                    artifact_names=["missing"],
+                ),
+            )
+
+        assert "semantic.publication.artifact_names" in str(exc_info.value)
+        assert "unknown semantic artifact" in str(exc_info.value)
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    def test_semantic_publication_artifact_names_accept_declared_artifacts(self) -> None:
+        """Contract: publication artifact names accept known artifact names."""
+        binding = SemanticDeploymentBinding(
+            provider="semantic-provider",
+            artifacts=[
+                {
+                    "name": "semantic-models",
+                    "mount_path": "/var/lib/floe/semantic",
+                    "format": "semantic-model",
+                }
+            ],
+            publication=SemanticPublicationBinding(
+                enabled=True,
+                policy="publish-on-change",
+                artifact_names=["semantic-models"],
+            ),
+        )
+
+        assert binding.publication is not None
+        assert binding.publication.artifact_names == ["semantic-models"]
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
     @pytest.mark.parametrize(
         ("runtime_key", "semantic_payload"),
         [

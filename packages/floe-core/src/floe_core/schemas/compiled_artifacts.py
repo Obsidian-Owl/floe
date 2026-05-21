@@ -438,7 +438,12 @@ def _assert_json_compatible_fragment(value: Any, path: str) -> None:
 
 
 def _assert_env_var_name_map(value: dict[str, str], path: str) -> None:
-    """Ensure a map's values are environment variable names, not inline values."""
+    """Ensure a map's values are environment variable names, not inline values.
+
+    Single-word names matching credential keywords, such as ``TOKEN`` or
+    ``PASSWORD``, are intentionally rejected so raw secret values cannot pass
+    by choosing a syntactically valid environment variable name.
+    """
     for key, env_name in value.items():
         if _ENV_VAR_NAME_PATTERN.fullmatch(env_name) is None:
             msg = f"{path}.{key} must be an environment variable name"
@@ -1414,6 +1419,27 @@ class SemanticDeploymentBinding(BaseModel):
         """Ensure env refs carry environment variable names only."""
         _assert_env_var_name_map(value, "semantic.env_refs")
         return value
+
+    @model_validator(mode="after")
+    def validate_internal_references(self) -> SemanticDeploymentBinding:
+        """Ensure semantic bindings reference declared deployment fragments."""
+        service_endpoint_names = {endpoint.name for endpoint in self.service_endpoints}
+        for api in self.apis:
+            if api.endpoint_name not in service_endpoint_names:
+                raise ValueError(
+                    "semantic.api.endpoint_name references unknown service endpoint: "
+                    f"{api.endpoint_name!r}"
+                )
+
+        artifact_names = {artifact.name for artifact in self.artifacts}
+        if self.publication is not None:
+            for artifact_name in self.publication.artifact_names:
+                if artifact_name not in artifact_names:
+                    raise ValueError(
+                        "semantic.publication.artifact_names references unknown "
+                        f"semantic artifact: {artifact_name!r}"
+                    )
+        return self
 
 
 class DeploymentConfig(BaseModel):

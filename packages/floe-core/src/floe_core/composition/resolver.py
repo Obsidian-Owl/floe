@@ -171,6 +171,8 @@ class CompositionResolver:
         # semantic runtime/publication capabilities. They are carried in the
         # composition vocabulary here, but resolved deployment bindings own
         # provider-specific matching outside this storage/catalog validation.
+        # TODO(Phase 2A): enforce those dimensions when semantic provider
+        # adapters materialize resolved deployment bindings.
         return issues
 
     def _validate_ingestion(

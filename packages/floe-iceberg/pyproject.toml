@@ -31,7 +31,7 @@ dependencies = [
     # OpenTelemetry for observability (FR-041 to FR-044)
     "opentelemetry-api>=1.39.0,<2.0",
     # PyArrow for data handling; pin upper bound (12B-DEP T048)
-    "pyarrow>=23.0.1,<24.0",
+    "pyarrow>=14.0,<24.0",
     # floe-core for plugin interfaces (CatalogPlugin, StoragePlugin)
     "floe-core>=0.1.0a1,<0.2.0",
 ]
