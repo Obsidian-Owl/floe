@@ -2214,10 +2214,10 @@ class TestCompiledArtifactsVersionBump:
     """Tests for AC-6: current contract version and history entries."""
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_compiled_artifacts_version_is_0_16_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.16.0'."""
-        assert COMPILED_ARTIFACTS_VERSION == "0.16.0", (
-            f"Expected version '0.16.0', got '{COMPILED_ARTIFACTS_VERSION}'"
+    def test_compiled_artifacts_version_is_0_17_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.17.0'."""
+        assert COMPILED_ARTIFACTS_VERSION == "0.17.0", (
+            f"Expected version '0.17.0', got '{COMPILED_ARTIFACTS_VERSION}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
@@ -2237,8 +2237,15 @@ class TestCompiledArtifactsVersionBump:
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_compiled_artifacts_default_version_is_0_16_0(self) -> None:
-        """Test that CompiledArtifacts().version defaults to '0.16.0'."""
+    def test_version_history_contains_0_17_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.17.0' entry."""
+        assert COMPILED_ARTIFACTS_VERSION_HISTORY["0.17.0"] == (
+            "Add semantic deployment binding desired state"
+        )
+
+    @pytest.mark.requirement("T1-AC-6")
+    def test_compiled_artifacts_default_version_is_0_17_0(self) -> None:
+        """Test that CompiledArtifacts().version defaults to '0.17.0'."""
         artifacts = CompiledArtifacts(
             metadata=CompilationMetadata(
                 compiled_at=datetime.now(),
@@ -2267,7 +2274,7 @@ class TestCompiledArtifactsVersionBump:
                 lineage_namespace="test",
             ),
         )
-        assert artifacts.version == "0.16.0"
+        assert artifacts.version == "0.17.0"
 
 
 class TestGovernanceBackwardCompatibility:

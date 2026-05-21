@@ -20,12 +20,14 @@ import pytest
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
+    DeploymentConfig,
     ObservabilityConfig,
     PluginRef,
     ProductIdentity,
     ResolvedModel,
     ResolvedPlugins,
     ResolvedTransforms,
+    SemanticDeploymentBinding,
 )
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
@@ -423,6 +425,98 @@ class TestCompiledArtifactsSchemaContract:
             ).deployment
             is None
         )
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    def test_deployment_semantic_field_is_optional_for_backward_compatibility(self) -> None:
+        """Contract: deployment.semantic is optional for existing deployment bindings."""
+        deployment = DeploymentConfig()
+
+        assert deployment.semantic is None
+
+        schema = DeploymentConfig.model_json_schema()
+        assert "semantic" in schema["properties"]
+        assert "semantic" not in set(schema.get("required", []))
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    def test_semantic_deployment_binding_round_trips_through_compiled_artifacts_json(
+        self,
+        minimal_compiled_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Contract: semantic desired state survives CompiledArtifacts JSON round-trip."""
+        artifacts = minimal_compiled_artifacts.model_copy(
+            update={
+                "deployment": DeploymentConfig(
+                    semantic=SemanticDeploymentBinding(
+                        provider="semantic-provider",
+                        datasources=[
+                            {
+                                "name": "warehouse",
+                                "driver": "duckdb",
+                                "endpoint_url": "https://semantic.internal",
+                                "env_refs": {"api_token": "SEMANTIC_API_TOKEN"},
+                                "credential_refs": {
+                                    "api_token": {
+                                        "source": "kubernetes-secret",
+                                        "name": "semantic-credentials",
+                                        "key": "api-token",
+                                    }
+                                },
+                            }
+                        ],
+                        service_endpoints=[
+                            {
+                                "name": "internal",
+                                "url": "https://semantic.internal",
+                                "api_families": ["metadata", "query", "sql_http"],
+                            }
+                        ],
+                        apis=[
+                            {
+                                "family": "metadata",
+                                "endpoint_name": "internal",
+                                "path": "/metadata",
+                            },
+                            {
+                                "family": "query",
+                                "endpoint_name": "internal",
+                                "path": "/query",
+                            },
+                        ],
+                        artifacts=[
+                            {
+                                "name": "semantic-models",
+                                "mount_path": "/var/lib/floe/semantic",
+                                "format": "semantic-model",
+                            }
+                        ],
+                        publication={
+                            "enabled": True,
+                            "policy": "publish-on-change",
+                            "artifact_names": ["semantic-models"],
+                        },
+                        access_policies=[
+                            {
+                                "name": "analyst-read",
+                                "api_families": ["metadata", "query"],
+                                "principal_refs": ["group:data-analysts"],
+                            }
+                        ],
+                    )
+                )
+            }
+        )
+
+        restored = CompiledArtifacts.model_validate_json(artifacts.model_dump_json())
+
+        assert restored.deployment is not None
+        assert restored.deployment.semantic is not None
+        assert restored.deployment.semantic.provider == "semantic-provider"
+        assert restored.deployment.semantic.datasources[0].driver == "duckdb"
+        assert restored.deployment.semantic.service_endpoints[0].api_families == [
+            "metadata",
+            "query",
+            "sql_http",
+        ]
 
     @pytest.mark.requirement("2B-FR-004")
     def test_serialization_round_trip(self, minimal_compiled_artifacts: CompiledArtifacts) -> None:

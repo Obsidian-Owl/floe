@@ -13,10 +13,26 @@ Requirements Covered:
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 import pytest
-from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+from floe_core.schemas.compiled_artifacts import (
+    CompiledArtifacts,
+    DeploymentConfig,
+    PluginRef,
+    ResolvedPlugins,
+    SemanticDeploymentBinding,
+)
+from pydantic import ValidationError
+
+GOLDEN_SEMANTIC_FIXTURE = (
+    Path(__file__).parent.parent
+    / "fixtures"
+    / "golden"
+    / "v0.5_compiled_artifacts_with_semantic.json"
+)
 
 
 class TestSemanticPluginRefRoundTrip:
@@ -127,3 +143,133 @@ class TestResolvedPluginsSemanticField:
         assert restored.semantic is not None
         assert restored.semantic.type == "cube"
         assert restored.semantic.config == {"database_name": "analytics"}
+
+
+class TestSemanticDeploymentDesiredStateContract:
+    """Contract tests for provider-neutral deployment.semantic desired state."""
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    def test_semantic_env_refs_reject_raw_secret_values(self) -> None:
+        """Contract: env maps carry environment variable names, not raw secrets."""
+        with pytest.raises(ValidationError) as exc_info:
+            SemanticDeploymentBinding(
+                provider="semantic-provider",
+                datasources=[
+                    {
+                        "name": "warehouse",
+                        "driver": "duckdb",
+                        "env_refs": {"api_token": "raw-secret-value"},  # pragma: allowlist secret
+                    }
+                ],
+            )
+
+        assert "environment variable name" in str(exc_info.value)
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    def test_semantic_config_maps_reject_raw_secret_values(self) -> None:
+        """Contract: config maps carry desired configuration, not raw credentials."""
+        with pytest.raises(ValidationError) as exc_info:
+            SemanticDeploymentBinding(
+                provider="semantic-provider",
+                service_endpoints=[
+                    {
+                        "name": "internal",
+                        "url": "https://semantic.internal",
+                        "config": {"api_secret": "raw-secret-value"},  # pragma: allowlist secret
+                    }
+                ],
+            )
+
+        assert "raw credential material" in str(exc_info.value)
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    @pytest.mark.parametrize(
+        ("runtime_key", "semantic_payload"),
+        [
+            ("schema_artifacts", {"config": {"schema_artifacts": []}}),
+            ("query_results", {"config": {"query_results": []}}),
+            ("health_status", {"config": {"health_status": "ok"}}),
+            ("generated_files", {"config": {"generated_files": []}}),
+            ("schemaArtifacts", {"config": {"schemaArtifacts": []}}),
+            ("query-results", {"config": {"query-results": []}}),
+        ],
+    )
+    def test_semantic_deployment_rejects_runtime_evidence_fields(
+        self,
+        runtime_key: str,
+        semantic_payload: dict[str, Any],
+    ) -> None:
+        """Contract: deployment.semantic config maps reject runtime evidence fields."""
+        with pytest.raises(ValidationError) as exc_info:
+            DeploymentConfig(
+                semantic=SemanticDeploymentBinding(
+                    provider="semantic-provider",
+                    **semantic_payload,
+                )
+            )
+
+        assert runtime_key in str(exc_info.value)
+        assert "runtime evidence" in str(exc_info.value)
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    @pytest.mark.parametrize(
+        ("expected_path", "semantic_payload"),
+        [
+            ("semantic.config.health_status", {"config": {"health_status": "ok"}}),
+            (
+                "semantic.datasource.config.query_results",
+                {
+                    "datasources": [
+                        {
+                            "name": "warehouse",
+                            "driver": "duckdb",
+                            "config": {"query_results": []},
+                        }
+                    ]
+                },
+            ),
+            (
+                "semantic.artifact.config.schema_artifacts",
+                {
+                    "artifacts": [
+                        {
+                            "name": "semantic-models",
+                            "mount_path": "/var/lib/floe/semantic",
+                            "format": "semantic-model",
+                            "config": {"schema_artifacts": []},
+                        }
+                    ]
+                },
+            ),
+        ],
+    )
+    def test_semantic_config_maps_reject_runtime_evidence_keys(
+        self,
+        expected_path: str,
+        semantic_payload: dict[str, Any],
+    ) -> None:
+        """Contract: semantic config maps cannot smuggle runtime evidence."""
+        with pytest.raises(ValidationError) as exc_info:
+            SemanticDeploymentBinding(provider="semantic-provider", **semantic_payload)
+
+        assert expected_path in str(exc_info.value)
+        assert "runtime evidence" in str(exc_info.value)
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    def test_golden_fixture_uses_provider_neutral_semantic_desired_state(self) -> None:
+        """Contract: golden semantic fixture validates without provider endpoint leakage."""
+        raw_fixture = GOLDEN_SEMANTIC_FIXTURE.read_text(encoding="utf-8")
+
+        assert "cubejs-api" not in raw_fixture
+        assert "http://cube" not in raw_fixture
+        assert "CUBEJS_" not in raw_fixture
+
+        fixture = json.loads(raw_fixture)
+        fixture_without_comment = {
+            key: value for key, value in fixture.items() if key != "$comment"
+        }
+        artifacts = CompiledArtifacts.model_validate(fixture_without_comment)
+
+        assert artifacts.deployment is not None
+        assert artifacts.deployment.semantic is not None
+        assert artifacts.deployment.semantic.provider == "semantic-provider"

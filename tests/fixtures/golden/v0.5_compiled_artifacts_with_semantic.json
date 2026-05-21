@@ -74,10 +74,73 @@
       "type": "cube",
       "version": "0.1.0",
       "config": {
-        "server_url": "http://cube:4000",
-        "database_name": "analytics",
-        "schema_output_dir": "cube/schema"
+        "enabled": true
       }
+    }
+  },
+  "deployment": {
+    "semantic": {
+      "provider": "semantic-provider",
+      "datasources": [
+        {
+          "name": "warehouse",
+          "driver": "duckdb",
+          "endpoint_url": "https://semantic.internal",
+          "env_refs": {
+            "api_token": "SEMANTIC_API_TOKEN"
+          },
+          "credential_refs": {
+            "api_token": {
+              "source": "kubernetes-secret",
+              "name": "semantic-credentials",
+              "key": "api-token"
+            }
+          }
+        }
+      ],
+      "service_endpoints": [
+        {
+          "name": "internal",
+          "url": "https://semantic.internal",
+          "api_families": ["metadata", "query", "sql_http"]
+        }
+      ],
+      "apis": [
+        {
+          "family": "metadata",
+          "endpoint_name": "internal",
+          "path": "/metadata"
+        },
+        {
+          "family": "query",
+          "endpoint_name": "internal",
+          "path": "/query"
+        },
+        {
+          "family": "sql_http",
+          "endpoint_name": "internal",
+          "path": "/sql"
+        }
+      ],
+      "artifacts": [
+        {
+          "name": "semantic-models",
+          "mount_path": "/var/lib/floe/semantic",
+          "format": "semantic-model"
+        }
+      ],
+      "publication": {
+        "enabled": true,
+        "policy": "publish-on-change",
+        "artifact_names": ["semantic-models"]
+      },
+      "access_policies": [
+        {
+          "name": "analyst-read",
+          "api_families": ["metadata", "query"],
+          "principal_refs": ["group:data-analysts"]
+        }
+      ]
     }
   },
   "transforms": {

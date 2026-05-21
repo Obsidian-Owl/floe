@@ -402,17 +402,18 @@ class TestV05SemanticArtifacts:
             f"got {artifacts.plugins.semantic.version}"
         )
 
-        # Verify semantic config survived round-trip
+        # Verify provider-neutral semantic desired state survived round-trip.
         assert artifacts.plugins.semantic.config is not None, (
             "Semantic plugin config became None after round-trip"
         )
-        assert "server_url" in artifacts.plugins.semantic.config, (
-            "Semantic plugin config missing 'server_url' after round-trip"
+        assert artifacts.plugins.semantic.config == {"enabled": True}
+        assert artifacts.deployment is not None, "Deployment became None after round-trip"
+        assert artifacts.deployment.semantic is not None, (
+            "Semantic deployment binding became None after round-trip"
         )
-        assert artifacts.plugins.semantic.config["server_url"] == "http://cube:4000", (
-            "Expected server_url 'http://cube:4000', "
-            f"got {artifacts.plugins.semantic.config.get('server_url')}"
-        )
+        assert artifacts.deployment.semantic.provider == "semantic-provider"
+        assert artifacts.deployment.semantic.datasources[0].driver == "duckdb"
+        assert artifacts.deployment.semantic.apis[0].family == "metadata"
 
     @pytest.mark.requirement("CONTRACT-001")
     def test_v05_transforms_have_cube_tags(self) -> None:

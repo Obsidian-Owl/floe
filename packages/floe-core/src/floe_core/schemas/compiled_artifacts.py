@@ -126,6 +126,14 @@ _DLT_FILESYSTEM_CREDENTIAL_KEYS = frozenset(
         "s3_url_style",
     }
 )
+_SEMANTIC_RUNTIME_EVIDENCE_KEYS = frozenset(
+    {
+        "generatedfiles",
+        "healthstatus",
+        "queryresults",
+        "schemaartifacts",
+    }
+)
 
 
 def _validate_configmap_name(name: str) -> str:
@@ -427,6 +435,43 @@ def _assert_json_compatible_fragment(value: Any, path: str) -> None:
         "use JSON-compatible dict, list, string, number, boolean, or null values"
     )
     raise ValueError(msg)
+
+
+def _assert_env_var_name_map(value: dict[str, str], path: str) -> None:
+    """Ensure a map's values are environment variable names, not inline values."""
+    for key, env_name in value.items():
+        if _ENV_VAR_NAME_PATTERN.fullmatch(env_name) is None:
+            msg = f"{path}.{key} must be an environment variable name"
+            raise ValueError(msg)
+        if env_name.lower() in _SECRET_VALUE_MARKERS or (
+            _DEFAULT_ADMIN_CREDENTIAL_PATTERN.fullmatch(env_name.lower()) is not None
+        ):
+            msg = f"{path}.{key} looks like raw credential material"
+            raise ValueError(msg)
+
+
+def _assert_secret_free_config_map(value: dict[str, Any], path: str) -> None:
+    """Ensure desired-state config maps stay JSON-compatible and secret-free."""
+    _assert_json_compatible_fragment(value, path)
+    _assert_no_secret_material(value, path)
+    _assert_no_semantic_runtime_evidence_keys(value, path)
+
+
+def _assert_no_semantic_runtime_evidence_keys(value: Any, path: str) -> None:
+    """Reject runtime evidence fields from semantic desired-state fragments."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            normalized_key = re.sub(r"[^a-z0-9]", "", str(key).lower())
+            if normalized_key in _SEMANTIC_RUNTIME_EVIDENCE_KEYS:
+                msg = f"{child_path} is runtime evidence; keep it out of deployment.semantic"
+                raise ValueError(msg)
+            _assert_no_semantic_runtime_evidence_keys(child, child_path)
+        return
+
+    if isinstance(value, list):
+        for index, child in enumerate(value):
+            _assert_no_semantic_runtime_evidence_keys(child, f"{path}[{index}]")
 
 
 def _assert_dlt_filesystem_fragment_secret_free(value: Any, path: str) -> None:
@@ -1164,6 +1209,198 @@ class IngestionDeploymentBinding(BaseModel):
     dlt: DltIngestionBinding
 
 
+class SemanticDatasourceBinding(BaseModel):
+    """Provider-neutral semantic datasource desired state."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: NonEmptyString
+    driver: NonEmptyString
+    endpoint_url: NonEmptyString | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
+    credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
+
+    @field_validator("endpoint_url")
+    @classmethod
+    def validate_secret_free_endpoint_url(cls, value: str | None) -> str | None:
+        """Ensure datasource endpoint URLs do not embed credential material."""
+        if value is not None:
+            _assert_no_credential_bearing_uri(value, "semantic.datasource.endpoint_url")
+        return value
+
+    @field_validator("config")
+    @classmethod
+    def validate_secret_free_config(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure datasource config carries desired state only."""
+        _assert_secret_free_config_map(value, "semantic.datasource.config")
+        return value
+
+    @field_validator("env_refs")
+    @classmethod
+    def validate_env_refs(cls, value: dict[str, str]) -> dict[str, str]:
+        """Ensure env refs carry environment variable names only."""
+        _assert_env_var_name_map(value, "semantic.datasource.env_refs")
+        return value
+
+
+class SemanticServiceEndpointBinding(BaseModel):
+    """Provider-neutral semantic service endpoint desired state."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: NonEmptyString
+    url: NonEmptyString
+    api_families: list[NonEmptyString] = Field(default_factory=list)
+    config: dict[str, Any] = Field(default_factory=dict)
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
+    credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
+
+    @field_validator("url")
+    @classmethod
+    def validate_secret_free_url(cls, value: str) -> str:
+        """Ensure service endpoint URLs do not embed credential material."""
+        _assert_no_credential_bearing_uri(value, "semantic.service_endpoint.url")
+        return value
+
+    @field_validator("config")
+    @classmethod
+    def validate_secret_free_config(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure service endpoint config carries desired state only."""
+        _assert_secret_free_config_map(value, "semantic.service_endpoint.config")
+        return value
+
+    @field_validator("env_refs")
+    @classmethod
+    def validate_env_refs(cls, value: dict[str, str]) -> dict[str, str]:
+        """Ensure env refs carry environment variable names only."""
+        _assert_env_var_name_map(value, "semantic.service_endpoint.env_refs")
+        return value
+
+
+class SemanticApiBinding(BaseModel):
+    """Logical semantic API family exposed through a named service endpoint."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    family: NonEmptyString
+    endpoint_name: NonEmptyString
+    path: NonEmptyString | None = None
+    protocol: NonEmptyString | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
+    credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
+
+    @field_validator("config")
+    @classmethod
+    def validate_secret_free_config(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure API config carries desired state only."""
+        _assert_secret_free_config_map(value, "semantic.api.config")
+        return value
+
+    @field_validator("env_refs")
+    @classmethod
+    def validate_env_refs(cls, value: dict[str, str]) -> dict[str, str]:
+        """Ensure env refs carry environment variable names only."""
+        _assert_env_var_name_map(value, "semantic.api.env_refs")
+        return value
+
+
+class SemanticArtifactBinding(BaseModel):
+    """Desired semantic artifact mount state."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: NonEmptyString
+    mount_path: NonEmptyString
+    format: NonEmptyString
+    config: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("config")
+    @classmethod
+    def validate_secret_free_config(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure artifact config carries desired state only."""
+        _assert_secret_free_config_map(value, "semantic.artifact.config")
+        return value
+
+
+class SemanticPublicationBinding(BaseModel):
+    """Desired semantic publication policy."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    enabled: bool = False
+    policy: Literal["disabled", "manual", "publish-on-change", "publish-on-deploy"] = "manual"
+    artifact_names: list[NonEmptyString] = Field(default_factory=list)
+    config: dict[str, Any] = Field(default_factory=dict)
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
+    credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
+
+    @field_validator("config")
+    @classmethod
+    def validate_secret_free_config(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure publication config carries desired state only."""
+        _assert_secret_free_config_map(value, "semantic.publication.config")
+        return value
+
+    @field_validator("env_refs")
+    @classmethod
+    def validate_env_refs(cls, value: dict[str, str]) -> dict[str, str]:
+        """Ensure env refs carry environment variable names only."""
+        _assert_env_var_name_map(value, "semantic.publication.env_refs")
+        return value
+
+
+class SemanticAccessPolicyBinding(BaseModel):
+    """Desired semantic API access policy."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: NonEmptyString
+    api_families: list[NonEmptyString] = Field(default_factory=list)
+    principal_refs: list[NonEmptyString] = Field(default_factory=list)
+    role: NonEmptyString | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("config")
+    @classmethod
+    def validate_secret_free_config(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure access policy config carries desired state only."""
+        _assert_secret_free_config_map(value, "semantic.access_policy.config")
+        return value
+
+
+class SemanticDeploymentBinding(BaseModel):
+    """Secret-free semantic-layer desired state for deployment renderers."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    provider: NonEmptyString
+    datasources: list[SemanticDatasourceBinding] = Field(default_factory=list)
+    service_endpoints: list[SemanticServiceEndpointBinding] = Field(default_factory=list)
+    apis: list[SemanticApiBinding] = Field(default_factory=list)
+    artifacts: list[SemanticArtifactBinding] = Field(default_factory=list)
+    publication: SemanticPublicationBinding | None = None
+    access_policies: list[SemanticAccessPolicyBinding] = Field(default_factory=list)
+    config: dict[str, Any] = Field(default_factory=dict)
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
+    credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
+
+    @field_validator("config")
+    @classmethod
+    def validate_secret_free_config(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure semantic deployment config carries desired state only."""
+        _assert_secret_free_config_map(value, "semantic.config")
+        return value
+
+    @field_validator("env_refs")
+    @classmethod
+    def validate_env_refs(cls, value: dict[str, str]) -> dict[str, str]:
+        """Ensure env refs carry environment variable names only."""
+        _assert_env_var_name_map(value, "semantic.env_refs")
+        return value
+
+
 class DeploymentConfig(BaseModel):
     """Deployment bindings derived during compilation."""
 
@@ -1172,6 +1409,7 @@ class DeploymentConfig(BaseModel):
     storage: StorageDeploymentBinding | None = None
     catalog: CatalogDeploymentBinding | None = None
     ingestion: IngestionDeploymentBinding | None = None
+    semantic: SemanticDeploymentBinding | None = None
 
 
 class IngestionOutputTable(BaseModel):
@@ -2005,4 +2243,11 @@ __all__ = [
     "StorageRuntimeBinding",
     "StorageServiceEndpoint",
     "StorageWarehouse",
+    "SemanticAccessPolicyBinding",
+    "SemanticApiBinding",
+    "SemanticArtifactBinding",
+    "SemanticDatasourceBinding",
+    "SemanticDeploymentBinding",
+    "SemanticPublicationBinding",
+    "SemanticServiceEndpointBinding",
 ]

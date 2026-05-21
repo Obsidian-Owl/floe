@@ -22,20 +22,57 @@ from __future__ import annotations
 
 import inspect
 from abc import ABC
-from typing import get_type_hints
+from pathlib import Path
+from typing import Any, get_type_hints
 
 import pytest
+from floe_core.composition.models import PluginCapabilities, PluginRequirements
 from floe_core.plugin_metadata import PluginMetadata
 from floe_core.plugins.semantic import SemanticLayerPlugin
+from floe_core.schemas.compiled_artifacts import SemanticDeploymentBinding
 
-# The 5 required abstract methods on SemanticLayerPlugin
+# The legacy semantic methods kept for compatibility on SemanticLayerPlugin
 EXPECTED_ABSTRACT_METHODS = {
     "sync_from_dbt_manifest",
     "get_security_context",
-    "get_datasource_config",
-    "get_api_endpoints",
-    "get_helm_values_override",
 }
+
+EXPECTED_PROVIDER_NEUTRAL_METHODS = {
+    "get_composition_capabilities",
+    "get_composition_requirements",
+    "render_runtime_config",
+    "get_api_endpoint_families",
+}
+
+
+class ProviderNeutralSemanticPlugin(SemanticLayerPlugin):
+    """Minimal plugin implementing only the required provider-neutral contract."""
+
+    @property
+    def name(self) -> str:
+        return "neutral-semantic"
+
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    @property
+    def floe_api_version(self) -> str:
+        return "1.0"
+
+    def sync_from_dbt_manifest(
+        self,
+        manifest_path: Path,
+        output_dir: Path,
+    ) -> list[Path]:
+        return []
+
+    def get_security_context(
+        self,
+        namespace: str,
+        roles: list[str],
+    ) -> dict[str, Any]:
+        return {"namespace": namespace, "roles": roles}
 
 
 class TestSemanticLayerPluginABCStructure:
@@ -59,15 +96,12 @@ class TestSemanticLayerPluginABCStructure:
             SemanticLayerPlugin()  # type: ignore[abstract]
 
     @pytest.mark.requirement("SC-001")
-    def test_exactly_five_abstract_methods(self) -> None:
-        """Verify ABC defines exactly 5 semantic-specific abstract methods.
+    def test_required_abstract_methods_are_provider_neutral(self) -> None:
+        """Verify ABC no longer requires direct compute or Helm coupling.
 
-        The ABC should have these 5 abstract methods:
+        The ABC should require only provider-neutral semantic lifecycle methods:
         1. sync_from_dbt_manifest
         2. get_security_context
-        3. get_datasource_config
-        4. get_api_endpoints
-        5. get_helm_values_override
 
         Plus inherited abstract properties from PluginMetadata:
         name, version, floe_api_version
@@ -83,6 +117,22 @@ class TestSemanticLayerPluginABCStructure:
         assert EXPECTED_ABSTRACT_METHODS.issubset(all_abstract), (
             f"Missing abstract methods: {EXPECTED_ABSTRACT_METHODS - all_abstract}"
         )
+        assert "get_datasource_config" not in all_abstract
+        assert "get_helm_values_override" not in all_abstract
+        assert "get_api_endpoints" not in all_abstract
+
+    @pytest.mark.requirement("SC-001")
+    def test_provider_neutral_methods_are_available(self) -> None:
+        """Verify ABC exposes the provider-neutral semantic contract surface."""
+        for method_name in EXPECTED_PROVIDER_NEUTRAL_METHODS:
+            assert hasattr(SemanticLayerPlugin, method_name), f"Missing {method_name}"
+
+    @pytest.mark.requirement("SC-001")
+    def test_provider_neutral_minimal_plugin_is_instantiable(self) -> None:
+        """Verify plugins need not implement legacy compute or Helm methods."""
+        plugin = ProviderNeutralSemanticPlugin()
+
+        assert plugin.name == "neutral-semantic"
 
 
 class TestSemanticLayerPluginMethodSignatures:
@@ -108,11 +158,48 @@ class TestSemanticLayerPluginMethodSignatures:
 
     @pytest.mark.requirement("FR-001")
     def test_get_datasource_config_signature(self) -> None:
-        """Verify get_datasource_config has correct parameters."""
+        """Verify get_datasource_config remains compatibility-only."""
         sig = inspect.signature(SemanticLayerPlugin.get_datasource_config)
         params = list(sig.parameters.keys())
         assert "self" in params
         assert "compute_plugin" in params
+        assert sig.parameters["compute_plugin"].annotation in {Any, "Any"}
+
+    @pytest.mark.requirement("FR-001")
+    def test_get_composition_capabilities_signature(self) -> None:
+        """Verify get_composition_capabilities has provider-neutral parameters."""
+        sig = inspect.signature(SemanticLayerPlugin.get_composition_capabilities)
+        params = list(sig.parameters.keys())
+        assert params == ["self"]
+        assert sig.return_annotation in {PluginCapabilities, "PluginCapabilities"}
+
+    @pytest.mark.requirement("FR-001")
+    def test_get_composition_requirements_signature(self) -> None:
+        """Verify get_composition_requirements has provider-neutral parameters."""
+        sig = inspect.signature(SemanticLayerPlugin.get_composition_requirements)
+        params = list(sig.parameters.keys())
+        assert params == ["self"]
+        assert sig.return_annotation in {PluginRequirements, "PluginRequirements"}
+
+    @pytest.mark.requirement("FR-001")
+    def test_render_runtime_config_signature(self) -> None:
+        """Verify render_runtime_config consumes SemanticDeploymentBinding."""
+        sig = inspect.signature(SemanticLayerPlugin.render_runtime_config)
+        params = list(sig.parameters.keys())
+        assert params == ["self", "binding"]
+        assert sig.parameters["binding"].annotation in {
+            SemanticDeploymentBinding,
+            "SemanticDeploymentBinding",
+        }
+        assert sig.return_annotation is not inspect.Parameter.empty
+
+    @pytest.mark.requirement("FR-002")
+    def test_get_api_endpoint_families_signature(self) -> None:
+        """Verify endpoint families are reported without provider URLs."""
+        sig = inspect.signature(SemanticLayerPlugin.get_api_endpoint_families)
+        params = list(sig.parameters.keys())
+        assert params == ["self"]
+        assert sig.return_annotation is not inspect.Parameter.empty
 
     @pytest.mark.requirement("FR-002")
     def test_get_api_endpoints_signature(self) -> None:
@@ -136,8 +223,8 @@ class TestSemanticLayerPluginTypeHints:
     def test_all_methods_have_return_type_hints(self) -> None:
         """Verify all abstract methods have return type annotations.
 
-        Note: get_datasource_config uses TYPE_CHECKING for ComputePlugin,
-        so we use inspect.signature instead of get_type_hints for that method.
+        Compatibility methods use broad types so the provider-neutral methods
+        can be resolved with get_type_hints.
         """
         hints = get_type_hints(SemanticLayerPlugin.sync_from_dbt_manifest)
         assert "return" in hints
@@ -145,10 +232,22 @@ class TestSemanticLayerPluginTypeHints:
         hints = get_type_hints(SemanticLayerPlugin.get_security_context)
         assert "return" in hints
 
-        # get_datasource_config has a TYPE_CHECKING forward ref (ComputePlugin),
-        # so get_type_hints fails at runtime. Use inspect.signature instead.
-        sig = inspect.signature(SemanticLayerPlugin.get_datasource_config)
-        assert sig.return_annotation is not inspect.Parameter.empty
+        hints = get_type_hints(SemanticLayerPlugin.get_composition_capabilities)
+        assert hints["return"] is PluginCapabilities
+
+        hints = get_type_hints(SemanticLayerPlugin.get_composition_requirements)
+        assert hints["return"] is PluginRequirements
+
+        hints = get_type_hints(SemanticLayerPlugin.render_runtime_config)
+        assert hints["binding"] is SemanticDeploymentBinding
+        assert "return" in hints
+
+        hints = get_type_hints(SemanticLayerPlugin.get_api_endpoint_families)
+        assert "return" in hints
+
+        hints = get_type_hints(SemanticLayerPlugin.get_datasource_config)
+        assert hints["compute_plugin"] is Any
+        assert "return" in hints
 
         hints = get_type_hints(SemanticLayerPlugin.get_api_endpoints)
         assert "return" in hints
@@ -191,6 +290,42 @@ class TestSemanticLayerPluginDocstrings:
         """Verify SemanticLayerPlugin class has a docstring."""
         assert SemanticLayerPlugin.__doc__ is not None
         assert "SemanticLayerPlugin" in SemanticLayerPlugin.__doc__
+
+    @pytest.mark.requirement("SC-001")
+    def test_docstrings_are_provider_neutral(self) -> None:
+        """Verify ABC docs reject direct compute ownership and provider URLs."""
+        text = "\n".join(
+            part
+            for part in [
+                SemanticLayerPlugin.__doc__,
+                SemanticLayerPlugin.get_datasource_config.__doc__,
+                SemanticLayerPlugin.get_api_endpoints.__doc__,
+            ]
+            if part is not None
+        )
+
+        assert "delegates database connectivity" not in text
+        assert "active ComputePlugin" not in text
+        assert "ComputePlugin: Provides database connectivity" not in text
+        assert "cubejs-api" not in text.lower()
+        assert "/readyz" not in text
+
+    @pytest.mark.requirement("SC-001")
+    def test_default_provider_neutral_composition_values_are_empty(self) -> None:
+        """Verify default declarations are safe and explicitly neutral."""
+        plugin = ProviderNeutralSemanticPlugin()
+
+        capabilities = plugin.get_composition_capabilities()
+        requirements = plugin.get_composition_requirements()
+
+        assert capabilities == PluginCapabilities(
+            plugin_type="semantic",
+            plugin_name="neutral-semantic",
+        )
+        assert requirements == PluginRequirements(
+            plugin_type="semantic",
+            plugin_name="neutral-semantic",
+        )
 
 
 class TestSemanticLayerPluginOptionalMethods:

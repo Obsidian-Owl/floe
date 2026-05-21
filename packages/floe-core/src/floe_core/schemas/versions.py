@@ -29,7 +29,7 @@ FLOE_VERSION: str = "0.3.0"
 # Increment MAJOR for breaking changes (remove fields, change types)
 # Increment MINOR for backward-compatible additions (new optional fields)
 # Increment PATCH for documentation/metadata only changes
-COMPILED_ARTIFACTS_VERSION: str = "0.16.0"
+COMPILED_ARTIFACTS_VERSION: str = "0.17.0"
 
 # Version history (for documentation and compatibility checks)
 COMPILED_ARTIFACTS_VERSION_HISTORY: dict[str, str] = {
@@ -49,6 +49,7 @@ COMPILED_ARTIFACTS_VERSION_HISTORY: dict[str, str] = {
     "0.14.0": "Add ingestion_outputs to CompiledArtifacts",
     "0.15.0": "Add Iceberg REST catalog projection to catalog deployment bindings",
     "0.16.0": ("Add Glue catalog deployment binding and typed runtime catalog property values"),
+    "0.17.0": "Add semantic deployment binding desired state",
 }
 
 
@@ -62,7 +63,7 @@ def get_compiled_artifacts_version() -> str:
         >>> from floe_core.schemas.versions import get_compiled_artifacts_version
         >>> version = get_compiled_artifacts_version()
         >>> version
-        '0.16.0'
+        '0.17.0'
     """
     return COMPILED_ARTIFACTS_VERSION
 
