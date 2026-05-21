@@ -295,6 +295,15 @@ def _assert_no_credential_bearing_uri(value: str, path: str) -> None:
     _assert_no_secret_material(value_without_query_or_fragment, path)
 
 
+def _assert_no_endpoint_url_credentials(value: str, path: str) -> None:
+    """Reject endpoint URLs that embed credentials while allowing route names."""
+    parsed = urlsplit(value)
+    if parsed.scheme and parsed.netloc:
+        _assert_no_uri_secret_components(value, path)
+        return
+    _assert_no_secret_material(value, path)
+
+
 def _assert_no_dbt_profile_secret_material(value: Any, path: str) -> None:
     """Reject raw dbt profile credentials while allowing env_var references."""
     if isinstance(value, dict):
@@ -1225,7 +1234,7 @@ class SemanticDatasourceBinding(BaseModel):
     def validate_secret_free_endpoint_url(cls, value: str | None) -> str | None:
         """Ensure datasource endpoint URLs do not embed credential material."""
         if value is not None:
-            _assert_no_credential_bearing_uri(value, "semantic.datasource.endpoint_url")
+            _assert_no_endpoint_url_credentials(value, "semantic.datasource.endpoint_url")
         return value
 
     @field_validator("config")
@@ -1259,7 +1268,7 @@ class SemanticServiceEndpointBinding(BaseModel):
     @classmethod
     def validate_secret_free_url(cls, value: str) -> str:
         """Ensure service endpoint URLs do not embed credential material."""
-        _assert_no_credential_bearing_uri(value, "semantic.service_endpoint.url")
+        _assert_no_endpoint_url_credentials(value, "semantic.service_endpoint.url")
         return value
 
     @field_validator("config")

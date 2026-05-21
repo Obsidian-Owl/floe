@@ -200,6 +200,29 @@ class TestSemanticDeploymentDesiredStateContract:
         assert "raw credential material" in str(exc_info.value)
 
     @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
+    def test_semantic_endpoint_urls_accept_secret_named_route_segments(self) -> None:
+        """Contract: endpoint URL paths may contain route names like oauth/token."""
+        binding = SemanticDeploymentBinding(
+            provider="semantic-provider",
+            datasources=[
+                {
+                    "name": "warehouse",
+                    "driver": "postgres",
+                    "endpoint_url": "https://semantic.internal/oauth/token",
+                }
+            ],
+            service_endpoints=[
+                {
+                    "name": "internal",
+                    "url": "https://semantic.internal/oauth/token",
+                }
+            ],
+        )
+
+        assert binding.datasources[0].endpoint_url == "https://semantic.internal/oauth/token"
+        assert binding.service_endpoints[0].url == "https://semantic.internal/oauth/token"
+
+    @pytest.mark.requirement("SEMANTIC-CONTRACT-002")
     @pytest.mark.parametrize(
         "publication",
         [
