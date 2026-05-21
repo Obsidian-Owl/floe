@@ -11,6 +11,11 @@ from floe_core.composition.error_codes import (
     COMPOSITION_SECRET_PROJECTION_UNSUPPORTED,
     COMPOSITION_SECRET_PROVIDER_MISSING,
     COMPOSITION_SECRET_PROVIDER_UNSUPPORTED,
+    COMPOSITION_SEMANTIC_CATALOG_MISSING,
+    COMPOSITION_SEMANTIC_CATALOG_UNSUPPORTED,
+    COMPOSITION_SEMANTIC_PROTOCOL_UNSUPPORTED,
+    COMPOSITION_SEMANTIC_STORAGE_MISSING,
+    COMPOSITION_SEMANTIC_TABLE_FORMAT_UNSUPPORTED,
     COMPOSITION_STORAGE_MISSING,
 )
 from floe_core.composition.models import (
@@ -37,6 +42,9 @@ class CompositionResolver:
         identity = next((item for item in capabilities if item.plugin_type == "identity"), None)
 
         for requirement in requirements:
+            if requirement.plugin_type == "semantic":
+                issues.extend(self._validate_semantic(requirement, storage, catalog))
+                continue
             if requirement.plugin_type == "ingestion":
                 issues.extend(self._validate_ingestion(requirement, storage, catalog))
                 continue
@@ -73,6 +81,99 @@ class CompositionResolver:
             valid=not any(issue.severity == "error" for issue in issues),
             issues=issues,
         )
+
+    def _validate_semantic(
+        self,
+        semantic: PluginRequirements,
+        storage: PluginCapabilities | None,
+        catalog: PluginCapabilities | None,
+    ) -> list[CompositionIssue]:
+        """Validate semantic-layer requirements against selected storage and catalog."""
+        issues: list[CompositionIssue] = []
+        required_protocols = list(semantic.requirements.protocols)
+        if required_protocols and storage is None:
+            issues.append(
+                CompositionIssue(
+                    severity="error",
+                    code=COMPOSITION_SEMANTIC_STORAGE_MISSING,
+                    message=(
+                        f"semantic {semantic.plugin_name} requires storage protocols "
+                        f"{required_protocols} but no storage plugin was selected"
+                    ),
+                    plugins=[semantic.ref],
+                )
+            )
+        elif required_protocols and storage is not None:
+            storage_protocols = list(storage.capabilities.protocols)
+            if not set(storage_protocols).intersection(required_protocols):
+                issues.append(
+                    CompositionIssue(
+                        severity="error",
+                        code=COMPOSITION_SEMANTIC_PROTOCOL_UNSUPPORTED,
+                        message=(
+                            f"semantic {semantic.plugin_name} requires one of protocols "
+                            f"{required_protocols}; storage {storage.plugin_name} provides "
+                            f"{storage_protocols}"
+                        ),
+                        plugins=[storage.ref, semantic.ref],
+                    )
+                )
+
+        required_catalogs = list(semantic.requirements.catalog_providers)
+        required_table_formats = list(semantic.requirements.table_formats)
+        if (required_catalogs or required_table_formats) and catalog is None:
+            issues.append(
+                CompositionIssue(
+                    severity="error",
+                    code=COMPOSITION_SEMANTIC_CATALOG_MISSING,
+                    message=(
+                        f"semantic {semantic.plugin_name} requires catalog capabilities "
+                        "but no catalog plugin was selected"
+                    ),
+                    plugins=[semantic.ref],
+                )
+            )
+            return issues
+
+        if required_catalogs and catalog is not None:
+            provided_catalogs = list(catalog.capabilities.catalog_providers)
+            if not set(provided_catalogs).intersection(required_catalogs):
+                issues.append(
+                    CompositionIssue(
+                        severity="error",
+                        code=COMPOSITION_SEMANTIC_CATALOG_UNSUPPORTED,
+                        message=(
+                            f"semantic {semantic.plugin_name} requires one of catalog "
+                            f"providers {required_catalogs}; catalog {catalog.plugin_name} "
+                            f"provides {provided_catalogs}"
+                        ),
+                        plugins=[catalog.ref, semantic.ref],
+                    )
+                )
+
+        if required_table_formats and catalog is not None:
+            provided_table_formats = list(catalog.capabilities.table_formats)
+            if not set(provided_table_formats).intersection(required_table_formats):
+                issues.append(
+                    CompositionIssue(
+                        severity="error",
+                        code=COMPOSITION_SEMANTIC_TABLE_FORMAT_UNSUPPORTED,
+                        message=(
+                            f"semantic {semantic.plugin_name} requires one of table "
+                            f"formats {required_table_formats}; catalog "
+                            f"{catalog.plugin_name} provides {provided_table_formats}"
+                        ),
+                        plugins=[catalog.ref, semantic.ref],
+                    )
+                )
+
+        # API families, datasource engines, and artifact transports describe
+        # semantic runtime/publication capabilities. They are carried in the
+        # composition vocabulary here, but resolved deployment bindings own
+        # provider-specific matching outside this storage/catalog validation.
+        # TODO(Phase 2A): enforce those dimensions when semantic provider
+        # adapters materialize resolved deployment bindings.
+        return issues
 
     def _validate_ingestion(
         self,

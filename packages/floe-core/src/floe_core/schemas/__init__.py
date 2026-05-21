@@ -55,6 +55,13 @@ from floe_core.schemas.compiled_artifacts import (
     ManifestRef,
     ObservabilityConfig,
     ProductIdentity,
+    SemanticAccessPolicyBinding,
+    SemanticApiBinding,
+    SemanticArtifactBinding,
+    SemanticDatasourceBinding,
+    SemanticDeploymentBinding,
+    SemanticPublicationBinding,
+    SemanticServiceEndpointBinding,
 )
 
 # Data contract models (Epic 3C) - re-exports from official ODCS package
@@ -434,6 +441,13 @@ __all__: list[str] = [
     "ManifestRef",
     "ObservabilityConfig",
     "ProductIdentity",
+    "SemanticAccessPolicyBinding",
+    "SemanticApiBinding",
+    "SemanticArtifactBinding",
+    "SemanticDatasourceBinding",
+    "SemanticDeploymentBinding",
+    "SemanticPublicationBinding",
+    "SemanticServiceEndpointBinding",
     # RBAC resource schemas (Epic 7B)
     "ServiceAccountConfig",
     "RoleRule",
