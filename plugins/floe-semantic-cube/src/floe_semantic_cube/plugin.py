@@ -703,6 +703,8 @@ def _reject_unsupported_binding_fragments(binding: SemanticDeploymentBinding) ->
             unsupported_fragments.append(f"apis.{api.family}.path")
         if api.env_refs:
             unsupported_fragments.append(f"apis.{api.family}.env_refs")
+        if api.family != "sql_wire" and api.credential_refs:
+            unsupported_fragments.append(f"apis.{api.family}.credential_refs")
 
     if unsupported_fragments:
         raise CubeRuntimeConfigError(

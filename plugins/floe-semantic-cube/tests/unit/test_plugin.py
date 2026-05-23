@@ -530,6 +530,20 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
                 ),
                 "apis.query.env_refs",
             ),
+            (
+                lambda: _semantic_binding(
+                    apis=[
+                        SemanticApiBinding(
+                            family="query",
+                            endpoint_name="cube-api",
+                            credential_refs={
+                                "api_token": _credential_ref("token", name="cube-api"),
+                            },
+                        ),
+                    ],
+                ),
+                "apis.query.credential_refs",
+            ),
         ],
     )
     def test_render_runtime_config_rejects_unsupported_nested_binding_shapes(
