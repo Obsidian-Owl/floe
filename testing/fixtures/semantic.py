@@ -28,6 +28,106 @@ from floe_semantic_cube.plugin import CubeSemanticPlugin
 from pydantic import SecretStr
 
 
+def _semantic_meta(**semantic: Any) -> dict[str, Any]:
+    """Wrap semantic publication metadata in the dbt meta namespace."""
+    return {"floe": {"semantic": semantic}}
+
+
+def _manifest_column(
+    name: str,
+    data_type: str,
+    *,
+    meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a dbt manifest column entry."""
+    return {"name": name, "data_type": data_type, "meta": meta or {}}
+
+
+def customer_360_semantic_manifest() -> dict[str, Any]:
+    """Build a Customer 360 dbt manifest with explicit semantic publication.
+
+    The fixture intentionally includes sensitive and unannotated columns to
+    prove Cube schema generation is deny-by-default.
+    """
+    return {
+        "metadata": {
+            "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12/manifest.json",
+            "dbt_version": "1.9.0",
+            "generated_at": "2026-01-01T00:00:00Z",
+        },
+        "nodes": {
+            "model.analytics.mart_customer_360": {
+                "unique_id": "model.analytics.mart_customer_360",
+                "resource_type": "model",
+                "name": "mart_customer_360",
+                "schema": "gold",
+                "database": "analytics",
+                "depends_on": {"nodes": []},
+                "columns": {
+                    "customer_id": _manifest_column("customer_id", "integer"),
+                    "lifetime_value": _manifest_column("lifetime_value", "decimal"),
+                    "is_active": _manifest_column("is_active", "boolean"),
+                    "segment": _manifest_column("segment", "varchar"),
+                    "signup_date": _manifest_column("signup_date", "date"),
+                    "email": _manifest_column(
+                        "email",
+                        "varchar",
+                        meta={"sensitive": True},
+                    ),
+                    "phone": _manifest_column(
+                        "phone",
+                        "varchar",
+                        meta={"sensitive": True},
+                    ),
+                    "address": _manifest_column(
+                        "address",
+                        "varchar",
+                        meta={"masking_policy": "mask_address"},
+                    ),
+                    "ssn_hash": _manifest_column(
+                        "ssn_hash",
+                        "varchar",
+                        meta={"sensitive": True},
+                    ),
+                    "internal_risk_score": _manifest_column(
+                        "internal_risk_score",
+                        "decimal",
+                    ),
+                },
+                "meta": _semantic_meta(
+                    publish=True,
+                    measures={
+                        "total_lifetime_value": {
+                            "source": "lifetime_value",
+                            "type": "sum",
+                        },
+                        "active_customer_count": {
+                            "source": "customer_id",
+                            "type": "count_distinct",
+                            "filters": [{"sql": "{CUBE}.is_active = true"}],
+                        },
+                    },
+                    dimensions={
+                        "customer_segment": {
+                            "source": "segment",
+                            "type": "string",
+                        }
+                    },
+                    time_dimensions={
+                        "signup_date": {
+                            "source": "signup_date",
+                            "granularities": ["day", "month"],
+                        }
+                    },
+                    validation_metrics=["total_lifetime_value", "active_customer_count"],
+                ),
+                "tags": ["analytics", "semantic"],
+                "config": {"materialized": "table"},
+            },
+        },
+    }
+
+
 @pytest.fixture(scope="session")
 def cube_config() -> CubeSemanticConfig:
     """Session-scoped CubeSemanticConfig for testing.
@@ -68,7 +168,7 @@ def sample_dbt_manifest(tmp_path: Path) -> Path:
 
     The manifest follows the dbt manifest v12 schema with three models:
     - customers: Basic customer dimension table
-    - orders: Order fact table with numeric measures
+    - orders: Published order fact table with explicit semantic metadata
     - order_items: Detail table with foreign key relationships
 
     Args:
@@ -153,7 +253,28 @@ def sample_dbt_manifest(tmp_path: Path) -> Path:
                         "meta": {},
                     },
                 },
-                "meta": {},
+                "meta": _semantic_meta(
+                    publish=True,
+                    measures={
+                        "total_order_amount": {
+                            "source": "order_total",
+                            "type": "sum",
+                        }
+                    },
+                    dimensions={
+                        "order_status": {
+                            "source": "status",
+                            "type": "string",
+                        }
+                    },
+                    time_dimensions={
+                        "order_date": {
+                            "source": "order_date",
+                            "granularities": ["day", "month"],
+                        }
+                    },
+                    validation_metrics=["total_order_amount"],
+                ),
                 "tags": ["analytics", "cube"],
                 "config": {"materialized": "table"},
             },
