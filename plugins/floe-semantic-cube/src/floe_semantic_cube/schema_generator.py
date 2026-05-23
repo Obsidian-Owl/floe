@@ -1,31 +1,15 @@
-"""Cube schema generator from dbt manifest.
+"""Cube schema generator from dbt manifest semantic metadata.
 
 Converts dbt manifest.json model nodes into Cube YAML schema definitions.
-Supports column-to-measure/dimension inference, join conversion from ref()
-relationships, pre-aggregation generation from meta tags, and model filtering.
-
-Requirements Covered:
-    - FR-010: Parse dbt manifest and convert to Cube YAML
-    - FR-011: Each dbt model becomes a Cube with sql_table
-    - FR-012: Numeric columns become measures
-    - FR-013: Non-numeric columns become dimensions
-    - FR-014: dbt ref() -> Cube joins
-    - FR-015: dbt meta tags propagate to Cube metadata
-    - FR-016: Filter models by schema prefix or tag
-    - FR-017: Generated files are valid Cube YAML
-    - FR-018: Clean output_dir before writing
-    - FR-019: FileNotFoundError for missing manifest
-    - FR-020: SchemaGenerationError for malformed manifest
-    - FR-021: Pre-aggregations from meta tags
-    - FR-022: Rollup type with measure/dimension selections
-    - FR-023: refreshKey configuration
-    - FR-024: partitionGranularity support
-    - FR-025: No pre-aggregation when meta absent
+Publication is deny-by-default: only models with
+``meta.floe.semantic.publish: true`` and members explicitly listed under
+``meta.floe.semantic`` are emitted.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -36,43 +20,41 @@ from floe_semantic_cube.errors import SchemaGenerationError
 
 logger = structlog.get_logger(__name__)
 
-# Numeric SQL types that map to Cube measures
-_NUMERIC_TYPES: frozenset[str] = frozenset(
+_MEASURE_TYPES: frozenset[str] = frozenset(
+    {"avg", "count", "count_distinct", "max", "min", "number", "sum"}
+)
+_DIMENSION_TYPES: frozenset[str] = frozenset({"boolean", "number", "string", "time"})
+_JOIN_RELATIONSHIP_ALIASES: dict[str, str] = {
+    "many_to_one": "many_to_one",
+    "belongs_to": "many_to_one",
+    "belongsTo": "many_to_one",
+    "one_to_many": "one_to_many",
+    "has_many": "one_to_many",
+    "hasMany": "one_to_many",
+    "one_to_one": "one_to_one",
+    "has_one": "one_to_one",
+    "hasOne": "one_to_one",
+}
+_PRE_AGGREGATION_TYPES: frozenset[str] = frozenset({"rollup", "rollup_join"})
+_SENSITIVE_NAME_PARTS: frozenset[str] = frozenset(
     {
-        "integer",
-        "int",
-        "bigint",
-        "smallint",
-        "tinyint",
-        "float",
-        "double",
-        "real",
-        "decimal",
-        "numeric",
-        "number",
+        "address",
+        "birth_date",
+        "card_number",
+        "credit_card",
+        "dob",
+        "email",
+        "passport",
+        "phone",
+        "social_security",
+        "ssn",
     }
 )
-
-# Time SQL types that map to Cube time dimensions
-_TIME_TYPES: frozenset[str] = frozenset(
-    {
-        "date",
-        "timestamp",
-        "timestamp_tz",
-        "timestamp_ntz",
-        "timestamptz",
-        "datetime",
-        "time",
-    }
+_SENSITIVE_CLASSIFICATIONS: frozenset[str] = frozenset(
+    {"confidential", "masked", "pii", "sensitive"}
 )
-
-# Boolean SQL types
-_BOOLEAN_TYPES: frozenset[str] = frozenset(
-    {
-        "boolean",
-        "bool",
-    }
-)
+_UNSAFE_JOIN_SQL_TOKENS: tuple[str, ...] = (";", "--", "/*", "*/")
+_DEFAULT_JOIN_RELATIONSHIP = "many_to_one"
 
 
 class CubeSchemaGenerator:
@@ -120,6 +102,7 @@ class CubeSchemaGenerator:
         manifest = self._load_manifest(manifest_path)
         models = self._extract_models(manifest)
         models = self._filter_models(models)
+        models = [model for model in models if self._is_model_published(model)]
 
         self._clean_output_dir(output_dir)
 
@@ -224,225 +207,556 @@ class CubeSchemaGenerator:
         name = model["name"]
         schema = model.get("schema", "public")
         sql_table = f"{schema}.{name}"
+        semantic = self._semantic_config(model)
 
-        measures: list[dict[str, Any]] = []
-        dimensions: list[dict[str, Any]] = []
-
-        columns: dict[str, Any] = model.get("columns", {})
-        for col_name, col_info in columns.items():
-            data_type = col_info.get("data_type", "").lower()
-            col_meta = col_info.get("meta", {})
-
-            if self._is_numeric_type(data_type):
-                measure = self._make_measure(col_name, data_type, col_meta)
-                measures.append(measure)
-            else:
-                dimension = self._make_dimension(col_name, data_type, col_meta)
-                dimensions.append(dimension)
+        measures = self._make_measures(model, semantic)
+        standard_dimensions = self._make_dimensions(model, semantic)
+        time_dimensions = self._make_time_dimensions(model, semantic)
+        dimensions = [*standard_dimensions, *time_dimensions]
 
         cube: dict[str, Any] = {
             "name": name,
             "sql_table": sql_table,
+            "measures": measures,
+            "dimensions": dimensions,
         }
 
-        if measures:
-            cube["measures"] = measures
-        else:
-            cube["measures"] = []
+        validation_metrics = self._make_validation_metrics(semantic, measures)
+        if validation_metrics:
+            cube["meta"] = {"floe": {"validation_metrics": validation_metrics}}
 
-        if dimensions:
-            cube["dimensions"] = dimensions
-        else:
-            cube["dimensions"] = []
-
-        # Joins from depends_on
-        joins = self._make_joins(model, all_models)
+        joins = self._make_joins(model, all_models, semantic)
         if joins:
             cube["joins"] = joins
 
-        # Pre-aggregations from meta
-        pre_aggs = self._make_pre_aggregations(model)
+        pre_aggs = self._make_pre_aggregations(
+            model,
+            semantic,
+            published_measures={measure["name"] for measure in measures},
+            published_dimensions={dimension["name"] for dimension in standard_dimensions},
+            published_time_dimensions={
+                dimension["name"] for dimension in dimensions if dimension["type"] == "time"
+            },
+        )
         if pre_aggs:
             cube["pre_aggregations"] = pre_aggs
 
         return cube
 
-    def _is_numeric_type(self, data_type: str) -> bool:
-        """Check if a SQL data type is numeric.
+    def _is_model_published(self, model: dict[str, Any]) -> bool:
+        """Return True when the dbt model explicitly opts into publication."""
+        return self._semantic_config(model).get("publish") is True
 
-        Args:
-            data_type: Lowercase SQL data type string.
+    def _semantic_config(self, model: dict[str, Any]) -> dict[str, Any]:
+        """Extract ``meta.floe.semantic`` from a dbt model node."""
+        meta = model.get("meta", {})
+        if not isinstance(meta, dict):
+            return {}
 
-        Returns:
-            True if the type is numeric.
-        """
-        return data_type in _NUMERIC_TYPES
+        floe_meta = meta.get("floe", {})
+        if not isinstance(floe_meta, dict):
+            return {}
 
-    def _make_measure(
+        semantic = floe_meta.get("semantic", {})
+        if not isinstance(semantic, dict):
+            return {}
+
+        return semantic
+
+    def _make_measures(
         self,
-        col_name: str,
-        data_type: str,
-        meta: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Create a Cube measure from a numeric column.
+        model: dict[str, Any],
+        semantic: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Create Cube measures from explicit semantic metadata."""
+        measures_config = self._member_configs(semantic, "measures")
+        measures: list[dict[str, Any]] = []
+        for name, config in measures_config.items():
+            measure_type = self._required_string(config, "type", "measure", name)
+            if measure_type not in _MEASURE_TYPES:
+                raise SchemaGenerationError(
+                    f"Unsupported measure type '{measure_type}' for semantic member '{name}'",
+                    model_name=model.get("name"),
+                )
 
-        Args:
-            col_name: Column name.
-            data_type: SQL data type.
-            meta: Column meta dictionary.
+            member = self._make_member(model, name, config, "measure", measure_type)
+            if member is None:
+                continue
+            measures.append(member)
 
-        Returns:
-            Cube measure definition.
-        """
-        # Check for meta override
-        measure_type = meta.get("cube_measure_type")
+        return measures
 
-        if measure_type is None:
-            # Heuristic: ID columns use count, others use sum
-            if col_name.endswith("_id") or col_name == "id":
-                measure_type = "count"
-            else:
-                measure_type = "sum"
+    def _make_dimensions(
+        self,
+        model: dict[str, Any],
+        semantic: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Create Cube dimensions from explicit semantic metadata."""
+        dimensions_config = self._member_configs(semantic, "dimensions")
+        dimensions: list[dict[str, Any]] = []
+        for name, config in dimensions_config.items():
+            dimension_type = self._required_string(config, "type", "dimension", name)
+            if dimension_type not in _DIMENSION_TYPES:
+                raise SchemaGenerationError(
+                    f"Unsupported dimension type '{dimension_type}' for semantic member '{name}'",
+                    model_name=model.get("name"),
+                )
 
-        return {
-            "name": col_name,
-            "type": measure_type,
-            "sql": col_name,
+            member = self._make_member(model, name, config, "dimension", dimension_type)
+            if member is None:
+                continue
+            dimensions.append(member)
+
+        return dimensions
+
+    def _make_time_dimensions(
+        self,
+        model: dict[str, Any],
+        semantic: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Create Cube time dimensions from explicit semantic metadata."""
+        time_dimensions_config = self._member_configs(semantic, "time_dimensions")
+        time_dimensions: list[dict[str, Any]] = []
+        for name, config in time_dimensions_config.items():
+            member = self._make_member(model, name, config, "time dimension", "time")
+            if member is None:
+                continue
+
+            granularities = config.get("granularities")
+            if granularities is not None:
+                if not isinstance(granularities, list) or not all(
+                    isinstance(granularity, str) for granularity in granularities
+                ):
+                    raise SchemaGenerationError(
+                        f"Invalid granularities for semantic member '{name}'",
+                        model_name=model.get("name"),
+                    )
+                member["granularities"] = granularities
+
+            time_dimensions.append(member)
+
+        return time_dimensions
+
+    def _make_member(
+        self,
+        model: dict[str, Any],
+        name: str,
+        config: dict[str, Any],
+        member_kind: str,
+        member_type: str,
+    ) -> dict[str, Any] | None:
+        """Create a Cube member unless privacy metadata blocks publication."""
+        source = self._required_string(config, "source", member_kind, name)
+        self._validate_source_column(model, source, member_kind, name)
+        block_reason = self._publication_block_reason(model, name, source, config)
+        if block_reason is not None:
+            logger.info(
+                "semantic_member_blocked",
+                model=model.get("name"),
+                member=name,
+                source=source,
+                reason=block_reason,
+            )
+            return None
+
+        member: dict[str, Any] = {
+            "name": name,
+            "type": member_type,
+            "sql": source,
         }
 
-    def _make_dimension(
-        self,
-        col_name: str,
-        data_type: str,
-        meta: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Create a Cube dimension from a non-numeric column.
+        for key in ("description", "format"):
+            if key in config:
+                member[key] = config[key]
+        if "filters" in config:
+            member["filters"] = self._validate_member_filters(model, name, config["filters"])
 
-        Args:
-            col_name: Column name.
-            data_type: SQL data type.
-            meta: Column meta dictionary.
-
-        Returns:
-            Cube dimension definition.
-        """
-        # Check for meta override
-        cube_type = meta.get("cube_type")
-
-        if cube_type is None:
-            cube_type = self._infer_dimension_type(data_type)
-
-        return {
-            "name": col_name,
-            "type": cube_type,
-            "sql": col_name,
-        }
-
-    def _infer_dimension_type(self, data_type: str) -> str:
-        """Infer Cube dimension type from SQL data type.
-
-        Args:
-            data_type: Lowercase SQL data type string.
-
-        Returns:
-            Cube dimension type string.
-        """
-        if data_type in _TIME_TYPES:
-            return "time"
-        if data_type in _BOOLEAN_TYPES:
-            return "boolean"
-        return "string"
+        return member
 
     def _make_joins(
         self,
         model: dict[str, Any],
         all_models: list[dict[str, Any]],
+        semantic: dict[str, Any],
     ) -> list[dict[str, Any]]:
-        """Create Cube joins from dbt depends_on relationships.
+        """Create Cube joins from explicit semantic metadata.
 
         Args:
-            model: The model that depends on other models.
+            model: dbt model node dictionary.
             all_models: All models for name resolution.
+            semantic: Extracted semantic publication metadata.
 
         Returns:
             List of Cube join definitions.
         """
-        depends_on = model.get("depends_on", {}).get("nodes", [])
-        if not depends_on:
-            return []
-
-        # Build lookup for model unique_id -> name
-        model_names: dict[str, str] = {m["unique_id"]: m["name"] for m in all_models}
-
-        model_meta = model.get("meta", {})
-        join_relationship_overrides: dict[str, str] = model_meta.get("cube_join_relationship", {})
-
+        joins_config = self._member_configs(semantic, "joins")
+        published_model_names = {published_model["name"] for published_model in all_models}
         joins: list[dict[str, Any]] = []
-        for dep_id in depends_on:
-            dep_name = model_names.get(dep_id)
-            if dep_name is None:
-                # Dependency is not a model in our set, skip
-                continue
+        for name, config in joins_config.items():
+            if name not in published_model_names:
+                raise SchemaGenerationError(
+                    f"Semantic join '{name}' targets unpublished model",
+                    model_name=model.get("name"),
+                )
 
-            relationship = join_relationship_overrides.get(dep_name, "belongs_to")
+            join_sql = self._required_string(config, "sql", "join", name)
+            self._validate_join_sql(model, name, join_sql)
+            relationship = self._normalize_join_relationship(model, name, config)
 
-            # Generate default join SQL using shared column name convention
-            # Look for common column (e.g., customer_id in both model and dep)
-            join_sql = f"{{{model['name']}}}.{dep_name}_id = {{{dep_name}}}.{dep_name}_id"
-
-            joins.append(
-                {
-                    "name": dep_name,
-                    "sql": join_sql,
-                    "relationship": relationship,
-                }
-            )
+            joins.append({"name": name, "sql": join_sql, "relationship": relationship})
 
         return joins
 
-    def _make_pre_aggregations(self, model: dict[str, Any]) -> list[dict[str, Any]]:
-        """Create Cube pre-aggregation definitions from meta tags.
+    def _normalize_join_relationship(
+        self,
+        model: dict[str, Any],
+        name: str,
+        config: dict[str, Any],
+    ) -> str:
+        """Return a canonical Cube relationship value for a semantic join."""
+        relationship = config.get("relationship", _DEFAULT_JOIN_RELATIONSHIP)
+        if not isinstance(relationship, str) or relationship not in _JOIN_RELATIONSHIP_ALIASES:
+            raise SchemaGenerationError(
+                f"Unsupported join relationship '{relationship}' for semantic join '{name}'",
+                model_name=model.get("name"),
+            )
+        return _JOIN_RELATIONSHIP_ALIASES[relationship]
 
-        Args:
-            model: dbt model node dictionary.
+    def _validate_join_sql(self, model: dict[str, Any], name: str, join_sql: str) -> None:
+        """Reject tokens that would turn a join expression into a SQL statement."""
+        self._validate_sql_expression(model, name, "join", join_sql)
 
-        Returns:
-            List of pre-aggregation definitions, empty if no meta tags.
-        """
-        meta = model.get("meta", {})
-        pre_agg_config: dict[str, Any] | None = meta.get("cube_pre_aggregation")
+    def _validate_member_filters(
+        self,
+        model: dict[str, Any],
+        name: str,
+        filters: Any,
+    ) -> list[dict[str, Any]]:
+        """Validate Cube filter metadata before passing it through."""
+        if not isinstance(filters, list) or not all(
+            isinstance(filter_config, dict) for filter_config in filters
+        ):
+            raise SchemaGenerationError(
+                f"Semantic member '{name}' filters must be a list of objects",
+                model_name=model.get("name"),
+            )
 
-        if not pre_agg_config:
-            return []
+        for filter_config in filters:
+            sql = filter_config.get("sql")
+            if sql is None:
+                continue
+            if not isinstance(sql, str) or not sql:
+                raise SchemaGenerationError(
+                    f"Semantic member '{name}' filter sql must be a non-empty string",
+                    model_name=model.get("name"),
+                )
+            self._validate_sql_expression(model, name, "filter", sql)
 
-        pre_aggs: list[dict[str, Any]] = []
-        for name, config in pre_agg_config.items():
-            pre_agg: dict[str, Any] = {
+        return filters
+
+    def _validate_sql_expression(
+        self,
+        model: dict[str, Any],
+        name: str,
+        expression_kind: str,
+        sql: str,
+    ) -> None:
+        """Reject tokens that would turn a SQL expression into a statement."""
+        for token in _UNSAFE_JOIN_SQL_TOKENS:
+            if token in sql:
+                raise SchemaGenerationError(
+                    f"Semantic {expression_kind} '{name}' contains unsafe SQL token '{token}'",
+                    model_name=model.get("name"),
+                )
+
+    def _make_pre_aggregations(
+        self,
+        model: dict[str, Any],
+        semantic: dict[str, Any],
+        *,
+        published_measures: set[str],
+        published_dimensions: set[str],
+        published_time_dimensions: set[str],
+    ) -> list[dict[str, Any]]:
+        """Create Cube pre-aggregation definitions from explicit semantic metadata."""
+        pre_aggregation_config = self._member_configs(semantic, "pre_aggregations")
+
+        pre_aggregations: list[dict[str, Any]] = []
+        for name, config in pre_aggregation_config.items():
+            pre_aggregation_type = config.get("type", "rollup")
+            if (
+                not isinstance(pre_aggregation_type, str)
+                or pre_aggregation_type not in _PRE_AGGREGATION_TYPES
+            ):
+                raise SchemaGenerationError(
+                    f"Unsupported pre-aggregation type '{pre_aggregation_type}' "
+                    f"for semantic pre-aggregation '{name}'"
+                )
+
+            pre_aggregation: dict[str, Any] = {
                 "name": name,
-                "type": config.get("type", "rollup"),
+                "type": pre_aggregation_type,
             }
+            self._validate_pre_aggregation_references(
+                model,
+                name,
+                config,
+                published_measures=published_measures,
+                published_dimensions=published_dimensions,
+                published_time_dimensions=published_time_dimensions,
+            )
+            for key in (
+                "measures",
+                "dimensions",
+                "time_dimension",
+                "granularity",
+                "refresh_key",
+                "partition_granularity",
+            ):
+                if key in config:
+                    pre_aggregation[key] = config[key]
 
-            if "measures" in config:
-                pre_agg["measures"] = config["measures"]
+            pre_aggregations.append(pre_aggregation)
 
-            if "dimensions" in config:
-                pre_agg["dimensions"] = config["dimensions"]
+        return pre_aggregations
 
-            if "time_dimension" in config:
-                pre_agg["time_dimension"] = config["time_dimension"]
+    def _validate_pre_aggregation_references(
+        self,
+        model: dict[str, Any],
+        name: str,
+        config: dict[str, Any],
+        *,
+        published_measures: set[str],
+        published_dimensions: set[str],
+        published_time_dimensions: set[str],
+    ) -> None:
+        """Validate pre-aggregations reference only published semantic members."""
+        self._validate_reference_list(
+            model,
+            name,
+            config,
+            "measures",
+            published_measures,
+            "measure",
+        )
+        self._validate_reference_list(
+            model,
+            name,
+            config,
+            "dimensions",
+            published_dimensions,
+            "dimension",
+        )
 
-            if "granularity" in config:
-                pre_agg["granularity"] = config["granularity"]
+        time_dimension = config.get("time_dimension")
+        if time_dimension is None:
+            return
+        if not isinstance(time_dimension, str):
+            raise SchemaGenerationError(
+                f"Semantic pre-aggregation '{name}' time_dimension must be a string",
+                model_name=model.get("name"),
+            )
+        if time_dimension not in published_time_dimensions:
+            raise SchemaGenerationError(
+                f"Semantic pre-aggregation '{name}' references unpublished "
+                f"time_dimension '{time_dimension}'",
+                model_name=model.get("name"),
+            )
 
-            if "refresh_key" in config:
-                pre_agg["refresh_key"] = config["refresh_key"]
+    def _validate_reference_list(
+        self,
+        model: dict[str, Any],
+        pre_aggregation_name: str,
+        config: dict[str, Any],
+        key: str,
+        published_names: set[str],
+        member_kind: str,
+    ) -> None:
+        """Validate a pre-aggregation member reference list."""
+        if key not in config:
+            return
 
-            if "partition_granularity" in config:
-                pre_agg["partition_granularity"] = config["partition_granularity"]
+        references = config.get(key, [])
+        if not isinstance(references, list) or not all(
+            isinstance(reference, str) for reference in references
+        ):
+            raise SchemaGenerationError(
+                f"Semantic pre-aggregation '{pre_aggregation_name}' {key} "
+                "must be a list of member names",
+                model_name=model.get("name"),
+            )
 
-            pre_aggs.append(pre_agg)
+        unpublished = [reference for reference in references if reference not in published_names]
+        if unpublished:
+            raise SchemaGenerationError(
+                f"Semantic pre-aggregation '{pre_aggregation_name}' references "
+                f"unpublished {member_kind}(s): {', '.join(sorted(unpublished))}",
+                model_name=model.get("name"),
+            )
 
-        return pre_aggs
+    def _make_validation_metrics(
+        self,
+        semantic: dict[str, Any],
+        measures: list[dict[str, Any]],
+    ) -> list[str]:
+        """Return explicit validation metrics that reference published measures."""
+        validation_metrics = semantic.get("validation_metrics", [])
+        if validation_metrics is None:
+            return []
+        if not isinstance(validation_metrics, list) or not all(
+            isinstance(metric, str) for metric in validation_metrics
+        ):
+            raise SchemaGenerationError("validation_metrics must be a list of measure names")
+
+        published_measure_names = {measure["name"] for measure in measures}
+        unknown_metrics = [
+            metric for metric in validation_metrics if metric not in published_measure_names
+        ]
+        if unknown_metrics:
+            raise SchemaGenerationError(
+                "validation_metrics references unpublished measure(s): "
+                + ", ".join(sorted(unknown_metrics))
+            )
+
+        return validation_metrics
+
+    def _member_configs(
+        self,
+        semantic: dict[str, Any],
+        key: str,
+    ) -> dict[str, dict[str, Any]]:
+        """Return a semantic member mapping after validating its shape."""
+        raw_config = semantic.get(key, {})
+        if raw_config is None:
+            return {}
+        if not isinstance(raw_config, dict):
+            raise SchemaGenerationError(f"meta.floe.semantic.{key} must be a mapping")
+
+        configs: dict[str, dict[str, Any]] = {}
+        for name, config in raw_config.items():
+            if not isinstance(name, str) or not isinstance(config, dict):
+                raise SchemaGenerationError(
+                    f"meta.floe.semantic.{key} entries must map names to objects"
+                )
+            configs[name] = config
+
+        return configs
+
+    def _required_string(
+        self,
+        config: dict[str, Any],
+        key: str,
+        member_kind: str,
+        name: str,
+    ) -> str:
+        """Read a required string value from member metadata."""
+        value = config.get(key)
+        if not isinstance(value, str) or not value:
+            raise SchemaGenerationError(
+                f"Semantic {member_kind} '{name}' requires string field '{key}'"
+            )
+        return value
+
+    def _validate_source_column(
+        self,
+        model: dict[str, Any],
+        source: str,
+        member_kind: str,
+        name: str,
+    ) -> None:
+        """Require semantic member sources to reference exact dbt manifest columns."""
+        columns = model.get("columns", {})
+        if not isinstance(columns, dict) or source not in columns:
+            raise SchemaGenerationError(
+                f"Semantic {member_kind} '{name}' source must be an exact dbt column name: "
+                f"{source}",
+                model_name=model.get("name"),
+            )
+
+    def _is_publication_blocked(
+        self,
+        model: dict[str, Any],
+        member_name: str,
+        source: str,
+        config: dict[str, Any],
+    ) -> bool:
+        """Return True when a member points at a sensitive source without policy."""
+        return self._publication_block_reason(model, member_name, source, config) is not None
+
+    def _publication_block_reason(
+        self,
+        model: dict[str, Any],
+        member_name: str,
+        source: str,
+        config: dict[str, Any],
+    ) -> str | None:
+        """Return why publication is blocked, or None when publication is allowed."""
+        if self._has_safe_publication_policy(config):
+            return None
+
+        columns = model.get("columns", {})
+        column_info = columns.get(source, {}) if isinstance(columns, dict) else {}
+        column_meta = column_info.get("meta", {}) if isinstance(column_info, dict) else {}
+
+        if self._has_sensitive_name(member_name):
+            return "sensitive_member_name"
+        if self._has_sensitive_name(source):
+            return "sensitive_source_name"
+        if self._has_sensitive_column_meta(column_meta):
+            return "sensitive_column_metadata"
+        return None
+
+    def _has_safe_publication_policy(self, config: dict[str, Any]) -> bool:
+        """Return True when member metadata explicitly permits publication."""
+        policy = config.get("policy", {})
+        if isinstance(policy, dict) and policy.get("safe_for_publication") is True:
+            return True
+        return False
+
+    def _has_sensitive_name(self, name: str) -> bool:
+        """Return True when a field name looks like direct personal data."""
+        normalized = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", "_", name)
+        normalized = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", normalized).lower()
+        tokens = [token for token in re.split(r"[^a-z0-9]+", normalized) if token]
+        for part in _SENSITIVE_NAME_PARTS:
+            part_tokens = part.split("_")
+            if len(part_tokens) == 1:
+                if part_tokens[0] in tokens:
+                    return True
+                continue
+            for index in range(0, len(tokens) - len(part_tokens) + 1):
+                if tokens[index : index + len(part_tokens)] == part_tokens:
+                    return True
+        return False
+
+    def _has_sensitive_column_meta(self, column_meta: Any) -> bool:
+        """Return True when dbt column metadata marks a source as sensitive."""
+        if not isinstance(column_meta, dict):
+            return False
+
+        if column_meta.get("sensitive") is True:
+            return True
+        if column_meta.get("masked") is True:
+            return True
+        if column_meta.get("pii") is True:
+            return True
+        if column_meta.get("contains_pii") is True:
+            return True
+        # dbt masking_policy values are string policy names; any non-empty value is sensitive.
+        if column_meta.get("masking_policy"):
+            return True
+
+        classification = column_meta.get("classification")
+        if isinstance(classification, str):
+            return classification.lower() in _SENSITIVE_CLASSIFICATIONS
+
+        policy = column_meta.get("policy", {})
+        if isinstance(policy, dict):
+            sensitivity = policy.get("sensitivity")
+            if isinstance(sensitivity, str):
+                return sensitivity.lower() in _SENSITIVE_CLASSIFICATIONS
+
+        return False
 
     @staticmethod
     def _clean_output_dir(output_dir: Path) -> None:
