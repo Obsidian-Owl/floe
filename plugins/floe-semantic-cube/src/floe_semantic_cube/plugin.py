@@ -247,7 +247,8 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
             )
 
         _reject_unsupported_binding_fragments(binding)
-        _assert_no_raw_secret_values(binding.config, "semantic.config")
+        _validate_unique_api_families(binding.apis)
+        _assert_no_sentinel_secret_markers(binding.config, "semantic.config")
         service_endpoints = _service_endpoints_by_name(binding.service_endpoints)
         datasources = [self._render_datasource(datasource) for datasource in binding.datasources]
         env = self._render_environment(binding, datasources)
@@ -483,7 +484,10 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
             raise CubeRuntimeConfigError(
                 f"Unsupported Cube datasource driver {datasource.driver!r}"
             )
-        _assert_no_raw_secret_values(datasource.config, f"semantic.datasource.{datasource.name}")
+        _assert_no_sentinel_secret_markers(
+            datasource.config,
+            f"semantic.datasource.{datasource.name}",
+        )
 
         return {
             "name": datasource.name,
@@ -512,12 +516,24 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
                     "CUBEJS_DB_DUCKDB_DATABASE_PATH"
                 )
             env["CUBEJS_DB_DUCKDB_DATABASE_PATH"] = str(database_path)
-            if "s3_endpoint" in config:
-                env["CUBEJS_DB_DUCKDB_S3_ENDPOINT"] = str(config["s3_endpoint"])
-            if "s3_region" in config:
-                env["CUBEJS_DB_DUCKDB_S3_REGION"] = str(config["s3_region"])
-            if "s3_url_style" in config:
-                env["CUBEJS_DB_DUCKDB_S3_URL_STYLE"] = str(config["s3_url_style"])
+            _set_optional_env(
+                env,
+                config=config,
+                config_key="s3_endpoint",
+                env_key="CUBEJS_DB_DUCKDB_S3_ENDPOINT",
+            )
+            _set_optional_env(
+                env,
+                config=config,
+                config_key="s3_region",
+                env_key="CUBEJS_DB_DUCKDB_S3_REGION",
+            )
+            _set_optional_env(
+                env,
+                config=config,
+                config_key="s3_url_style",
+                env_key="CUBEJS_DB_DUCKDB_S3_URL_STYLE",
+            )
 
         schema_path = binding.config.get("schema_path")
         if schema_path is not None:
@@ -547,7 +563,7 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
                     "semantic api endpoint_name references unknown service endpoint: "
                     f"{api.endpoint_name!r}"
                 )
-            _assert_no_raw_secret_values(api.config, f"semantic.api.{api.family}")
+            _assert_no_sentinel_secret_markers(api.config, f"semantic.api.{api.family}")
 
             if api.family == "health":
                 rendered["health"] = {
@@ -572,9 +588,15 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
                 }
                 continue
 
+            path = _API_PATHS.get(api.family)
+            if path is None:
+                raise CubeRuntimeConfigError(
+                    f"No Cube API path mapping for family {api.family!r}",
+                    fragment=f"apis.{api.family}",
+                )
             rendered[api.family] = {
                 "endpoint_name": api.endpoint_name,
-                "path": _API_PATHS[api.family],
+                "path": path,
                 "protocol": api.protocol or "http",
             }
         return rendered
@@ -618,6 +640,34 @@ def _ensure_single_datasource(datasources: list[Any]) -> None:
         raise CubeRuntimeConfigError(
             "Cube runtime rendering supports exactly one datasource binding"
         )
+
+
+def _validate_unique_api_families(apis: list[SemanticApiBinding]) -> None:
+    """Ensure each logical semantic API family is declared at most once."""
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for api in apis:
+        if api.family in seen:
+            duplicates.add(api.family)
+        seen.add(api.family)
+    if duplicates:
+        raise CubeRuntimeConfigError(
+            f"duplicate semantic API family bindings: {sorted(duplicates)}",
+            fragment="apis",
+        )
+
+
+def _set_optional_env(
+    env: dict[str, str],
+    *,
+    config: dict[str, Any],
+    config_key: str,
+    env_key: str,
+) -> None:
+    """Set an env var from config when the value is present and non-null."""
+    value = config.get(config_key)
+    if value is not None:
+        env[env_key] = str(value)
 
 
 def _reject_unsupported_binding_fragments(binding: SemanticDeploymentBinding) -> None:
@@ -716,15 +766,15 @@ def _credential_refs_to_dict(
     return {name: _credential_ref_to_dict(ref) for name, ref in refs.items()}
 
 
-def _assert_no_raw_secret_values(value: Any, path: str) -> None:
-    """Reject raw secret-looking strings in adapter-supplied fragments."""
+def _assert_no_sentinel_secret_markers(value: Any, path: str) -> None:
+    """Reject sentinel markers that indicate unresolved secret material leaked into config."""
     if isinstance(value, dict):
         for key, child in value.items():
-            _assert_no_raw_secret_values(child, f"{path}.{key}")
+            _assert_no_sentinel_secret_markers(child, f"{path}.{key}")
         return
     if isinstance(value, list):
         for index, child in enumerate(value):
-            _assert_no_raw_secret_values(child, f"{path}[{index}]")
+            _assert_no_sentinel_secret_markers(child, f"{path}[{index}]")
         return
     if isinstance(value, str):
         value_text = value.lower()

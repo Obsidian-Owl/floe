@@ -29,6 +29,7 @@ from floe_core.schemas.compiled_artifacts import (
     SemanticServiceEndpointBinding,
 )
 
+import floe_semantic_cube.plugin as cube_plugin_module
 from floe_semantic_cube.config import CubeSemanticConfig
 from floe_semantic_cube.errors import CubeSemanticError
 from floe_semantic_cube.plugin import CubeSemanticPlugin
@@ -156,10 +157,10 @@ class TestCubeSemanticPluginApiEndpoints:
         assert "/cubejs-api/sql" not in endpoints.values()
 
 
-@pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-001")
 class TestCubeSemanticPluginProviderNeutralRuntime:
     """Tests for SemanticDeploymentBinding runtime rendering."""
 
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-001")
     def test_get_api_endpoint_families_returns_logical_floe_families(
         self, plugin: CubeSemanticPlugin
     ) -> None:
@@ -173,6 +174,7 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
             "health",
         ]
 
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-002")
     def test_render_runtime_config_maps_duckdb_s3_binding_to_cube_env(
         self, plugin: CubeSemanticPlugin
     ) -> None:
@@ -248,6 +250,7 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
         assert runtime_config["apis"]["health"]["ready_path"] == "/readyz"
         assert runtime_config["apis"]["health"]["live_path"] == "/livez"
 
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-003")
     def test_render_runtime_config_rejects_non_cube_provider(
         self, plugin: CubeSemanticPlugin
     ) -> None:
@@ -257,6 +260,7 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
         with pytest.raises(CubeSemanticError, match="Unsupported semantic provider"):
             plugin.render_runtime_config(binding)
 
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-004")
     def test_render_runtime_config_rejects_unsupported_datasource_driver(
         self, plugin: CubeSemanticPlugin
     ) -> None:
@@ -270,6 +274,7 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
         with pytest.raises(CubeSemanticError, match="Unsupported Cube datasource driver"):
             plugin.render_runtime_config(binding)
 
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-005")
     def test_render_runtime_config_rejects_multiple_datasources(
         self, plugin: CubeSemanticPlugin
     ) -> None:
@@ -284,6 +289,7 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
         with pytest.raises(CubeSemanticError, match="exactly one datasource"):
             plugin.render_runtime_config(binding)
 
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-006")
     def test_render_runtime_config_requires_endpoint_for_each_api(
         self, plugin: CubeSemanticPlugin
     ) -> None:
@@ -304,6 +310,7 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
         with pytest.raises(CubeSemanticError, match="unknown service endpoint"):
             plugin.render_runtime_config(binding)
 
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-007")
     def test_render_runtime_config_requires_sql_refs_when_sql_wire_enabled(
         self, plugin: CubeSemanticPlugin
     ) -> None:
@@ -322,6 +329,7 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
         with pytest.raises(CubeSemanticError, match="sql_wire requires credential_refs"):
             plugin.render_runtime_config(binding)
 
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-008")
     def test_render_runtime_config_rejects_raw_secret_like_values(
         self, plugin: CubeSemanticPlugin
     ) -> None:
@@ -338,6 +346,7 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
         with pytest.raises(CubeSemanticError, match="raw credential"):
             plugin.render_runtime_config(binding)
 
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-009")
     def test_render_runtime_config_allows_non_secret_marker_substrings(
         self, plugin: CubeSemanticPlugin
     ) -> None:
@@ -376,6 +385,68 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
             == "/data/token_store/analytics.duckdb"
         )
 
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-010")
+    def test_render_runtime_config_skips_null_optional_s3_env_values(
+        self, plugin: CubeSemanticPlugin
+    ) -> None:
+        """Test optional S3 env values are omitted when explicitly null."""
+        binding = _semantic_binding(
+            datasources=[
+                _duckdb_datasource(
+                    config={
+                        "database_path": "/data/analytics.duckdb",
+                        "s3_endpoint": None,
+                        "s3_region": None,
+                        "s3_url_style": None,
+                    }
+                )
+            ]
+        )
+
+        runtime_config = plugin.render_runtime_config(binding)
+
+        assert runtime_config["env"] == {
+            "CUBEJS_DB_TYPE": "duckdb",
+            "CUBEJS_DB_DUCKDB_DATABASE_PATH": "/data/analytics.duckdb",
+            "CUBEJS_SCHEMA_PATH": "/cube/schema",
+            "CUBEJS_PG_SQL_PORT": "15432",
+        }
+
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-011")
+    def test_render_runtime_config_rejects_duplicate_api_families(
+        self, plugin: CubeSemanticPlugin
+    ) -> None:
+        """Test duplicate API families fail instead of rendering inconsistent config."""
+        binding = _semantic_binding(
+            apis=[
+                SemanticApiBinding(family="metadata", endpoint_name="cube-api"),
+                SemanticApiBinding(family="metadata", endpoint_name="cube-api"),
+            ]
+        )
+
+        with pytest.raises(CubeSemanticError, match="duplicate semantic API family"):
+            plugin.render_runtime_config(binding)
+
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-012")
+    def test_render_runtime_config_rejects_api_family_without_cube_path_mapping(
+        self, plugin: CubeSemanticPlugin, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test API allowlist/path-map drift produces a CubeRuntimeConfigError."""
+        monkeypatch.setattr(
+            cube_plugin_module,
+            "_API_FAMILIES",
+            [*cube_plugin_module._API_FAMILIES, "diagnostics"],
+        )
+        binding = _semantic_binding(
+            apis=[
+                SemanticApiBinding(family="diagnostics", endpoint_name="cube-api"),
+            ]
+        )
+
+        with pytest.raises(CubeSemanticError, match="No Cube API path mapping"):
+            plugin.render_runtime_config(binding)
+
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-013")
     def test_render_runtime_config_rejects_unsupported_binding_fragments(
         self, plugin: CubeSemanticPlugin
     ) -> None:
@@ -395,6 +466,7 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
         with pytest.raises(CubeSemanticError, match="unsupported semantic binding fragments"):
             plugin.render_runtime_config(binding)
 
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-014")
     @pytest.mark.parametrize(
         ("binding_factory", "expected_fragment"),
         [
@@ -607,13 +679,16 @@ def _duckdb_datasource(
     database_path: str = "/data/analytics.duckdb",
     endpoint_url: str | None = None,
     env_refs: dict[str, str] | None = None,
+    config: dict[str, object] | None = None,
 ) -> SemanticDatasourceBinding:
     """Create a DuckDB datasource binding with S3-compatible projection."""
     return SemanticDatasourceBinding(
         name=name,
         driver="duckdb",
         endpoint_url=endpoint_url,
-        config={
+        config=config
+        if config is not None
+        else {
             "database_path": database_path,
             "s3_endpoint": "http://minio:9000",
             "s3_region": "us-east-1",

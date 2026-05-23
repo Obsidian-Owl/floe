@@ -112,3 +112,8 @@ class CubeRuntimeConfigError(CubeSemanticError):
     translated into Cube environment/configuration without violating the
     adapter contract.
     """
+
+    def __init__(self, message: str, *, fragment: str | None = None) -> None:
+        self.fragment = fragment
+        detail = f" (fragment: {fragment})" if fragment else ""
+        super().__init__(f"{message}{detail}")
