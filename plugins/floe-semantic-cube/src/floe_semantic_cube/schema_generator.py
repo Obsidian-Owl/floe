@@ -713,7 +713,7 @@ class CubeSchemaGenerator:
 
     def _has_sensitive_name(self, name: str) -> bool:
         """Return True when a field name looks like direct personal data."""
-        normalized = name.lower()
+        normalized = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name).lower()
         tokens = [token for token in re.split(r"[^a-z0-9]+", normalized) if token]
         for part in _SENSITIVE_NAME_PARTS:
             part_tokens = part.split("_")

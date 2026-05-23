@@ -605,6 +605,42 @@ class TestSensitiveFieldPublication:
 
         assert cube["dimensions"] == []
 
+    def test_camel_case_sensitive_tokens_block_publication(self, tmp_path: Path) -> None:
+        """Sensitive-name matching splits common camelCase PII names."""
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    columns={
+                        "customerEmail": _make_column("customerEmail", "varchar"),
+                        "phoneNumber": _make_column("phoneNumber", "varchar"),
+                        "ssnHash": _make_column("ssnHash", "varchar"),
+                    },
+                    meta=_semantic_meta(
+                        publish=True,
+                        dimensions={
+                            "customerEmail": {
+                                "source": "customerEmail",
+                                "type": "string",
+                            },
+                            "phoneNumber": {
+                                "source": "phoneNumber",
+                                "type": "string",
+                            },
+                            "ssnHash": {
+                                "source": "ssnHash",
+                                "type": "string",
+                            },
+                        },
+                    ),
+                )
+            }
+        )
+
+        cube = _generate_single_cube(tmp_path, manifest)
+
+        assert cube["dimensions"] == []
+
     def test_blocked_member_is_logged(
         self,
         tmp_path: Path,
