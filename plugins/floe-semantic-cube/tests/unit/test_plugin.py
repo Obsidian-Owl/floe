@@ -156,6 +156,7 @@ class TestCubeSemanticPluginApiEndpoints:
         assert "/cubejs-api/sql" not in endpoints.values()
 
 
+@pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-001")
 class TestCubeSemanticPluginProviderNeutralRuntime:
     """Tests for SemanticDeploymentBinding runtime rendering."""
 
@@ -287,6 +288,8 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
         self, plugin: CubeSemanticPlugin
     ) -> None:
         """Test API bindings must reference a declared service endpoint."""
+        # Bypass schema-level reference validation to verify the adapter keeps
+        # its own fail-fast check for malformed bindings from non-Pydantic callers.
         binding = SemanticDeploymentBinding.model_construct(
             provider="cube",
             datasources=[_duckdb_datasource()],
@@ -334,6 +337,44 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
 
         with pytest.raises(CubeSemanticError, match="raw credential"):
             plugin.render_runtime_config(binding)
+
+    def test_render_runtime_config_allows_non_secret_marker_substrings(
+        self, plugin: CubeSemanticPlugin
+    ) -> None:
+        """Test ordinary config strings do not trip broad secret-word checks."""
+        datasource = SemanticDatasourceBinding.model_construct(
+            name="default",
+            driver="duckdb",
+            endpoint_url=None,
+            config={
+                "database_path": "/data/token_store/analytics.duckdb",
+                "s3_endpoint": "http://minio:9000",
+                "s3_region": "us-east-1",
+                "s3_url_style": "path",
+            },
+            env_refs={},
+            credential_refs={
+                "s3_access_key_id": _credential_ref("AWS_ACCESS_KEY_ID"),
+                "s3_secret_access_key": _credential_ref("AWS_SECRET_ACCESS_KEY"),
+            },
+        )
+        binding = _semantic_binding().model_copy(
+            update={
+                "datasources": [datasource],
+                "config": {
+                    "schema_path": "/cube/schema",
+                    "password_policy": "require_uppercase",  # pragma: allowlist secret
+                    "auth_mode": "bearer_delegation",
+                },
+            }
+        )
+
+        runtime_config = plugin.render_runtime_config(binding)
+
+        assert (
+            runtime_config["env"]["CUBEJS_DB_DUCKDB_DATABASE_PATH"]
+            == "/data/token_store/analytics.duckdb"
+        )
 
     def test_render_runtime_config_rejects_unsupported_binding_fragments(
         self, plugin: CubeSemanticPlugin
@@ -563,6 +604,7 @@ def _credential_ref(key: str, *, name: str = "cube-datasource") -> CredentialRef
 def _duckdb_datasource(
     *,
     name: str = "default",
+    database_path: str = "/data/analytics.duckdb",
     endpoint_url: str | None = None,
     env_refs: dict[str, str] | None = None,
 ) -> SemanticDatasourceBinding:
@@ -572,7 +614,7 @@ def _duckdb_datasource(
         driver="duckdb",
         endpoint_url=endpoint_url,
         config={
-            "database_path": "/data/analytics.duckdb",
+            "database_path": database_path,
             "s3_endpoint": "http://minio:9000",
             "s3_region": "us-east-1",
             "s3_url_style": "path",

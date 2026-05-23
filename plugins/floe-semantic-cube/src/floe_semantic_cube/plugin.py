@@ -71,11 +71,6 @@ _API_PATHS: dict[str, str] = {
 _SECRET_VALUE_MARKERS: tuple[str, ...] = (
     "raw-secret-value",
     "secret-value",
-    "password",
-    "private-key",
-    "private_key",
-    "token",
-    "bearer",
 )
 
 
@@ -506,10 +501,7 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
         """Render Cube environment variables from binding fragments."""
         env: dict[str, str] = {}
         if datasources:
-            if len(datasources) != 1:
-                raise CubeRuntimeConfigError(
-                    "Cube runtime rendering supports exactly one datasource binding"
-                )
+            _ensure_single_datasource(datasources)
             datasource = datasources[0]
             config = datasource["config"]
             env["CUBEJS_DB_TYPE"] = "duckdb"
@@ -598,6 +590,7 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
             credential_refs.update(_credential_refs_to_dict(datasource.credential_refs))
         sql_wire_api = _find_api(apis, "sql_wire")
         if sql_wire_api is not None:
+            _validate_sql_wire_refs(sql_wire_api)
             credential_refs["sql_user"] = _credential_ref_to_dict(
                 sql_wire_api.credential_refs["user"]
             )
@@ -617,6 +610,14 @@ def _service_endpoints_by_name(
 def _find_api(apis: list[SemanticApiBinding], family: str) -> SemanticApiBinding | None:
     """Return the API binding for a logical family, if declared."""
     return next((api for api in apis if api.family == family), None)
+
+
+def _ensure_single_datasource(datasources: list[Any]) -> None:
+    """Ensure Cube runtime rendering receives at most one datasource."""
+    if len(datasources) > 1:
+        raise CubeRuntimeConfigError(
+            "Cube runtime rendering supports exactly one datasource binding"
+        )
 
 
 def _reject_unsupported_binding_fragments(binding: SemanticDeploymentBinding) -> None:
@@ -678,6 +679,7 @@ def _render_secret_environment_refs(
     """Map Cube secret environment variables to unresolved credential refs."""
     secret_env_refs: dict[str, dict[str, str | None]] = {}
     if datasources:
+        _ensure_single_datasource(datasources)
         datasource = datasources[0]
         datasource_secret_env_names = {
             "s3_access_key_id": "CUBEJS_DB_DUCKDB_S3_ACCESS_KEY_ID",
@@ -726,7 +728,7 @@ def _assert_no_raw_secret_values(value: Any, path: str) -> None:
         return
     if isinstance(value, str):
         value_text = value.lower()
-        if any(marker in value_text for marker in _SECRET_VALUE_MARKERS):
+        if value_text in _SECRET_VALUE_MARKERS or value_text.startswith("raw-secret:"):
             raise CubeRuntimeConfigError(
                 f"{path} looks like raw credential material; use credential_refs instead"
             )

@@ -17,23 +17,16 @@ Requirements Covered:
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
 import httpx
 import pytest
 from floe_core.plugin_metadata import HealthState, HealthStatus
+from testing.base_classes.base_health_check_tests import BaseHealthCheckTests
 
-_REPO_ROOT = Path(__file__).resolve().parents[4]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
-
-from testing.base_classes.base_health_check_tests import BaseHealthCheckTests  # noqa: E402
-
-from floe_semantic_cube.config import CubeSemanticConfig  # noqa: E402
-from floe_semantic_cube.plugin import CubeSemanticPlugin  # noqa: E402
+from floe_semantic_cube.config import CubeSemanticConfig
+from floe_semantic_cube.plugin import CubeSemanticPlugin
 
 
 def _mock_healthy_response(*args: Any, **kwargs: Any) -> httpx.Response:
