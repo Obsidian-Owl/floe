@@ -7,21 +7,17 @@ The schema generator consumes dbt manifest model metadata from
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
+from testing.fixtures.semantic import customer_360_semantic_manifest
 
 from floe_semantic_cube.errors import SchemaGenerationError
 from floe_semantic_cube.schema_generator import CubeSchemaGenerator
 
-_REPO_ROOT = Path(__file__).resolve().parents[4]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
-
-from testing.fixtures.semantic import customer_360_semantic_manifest  # noqa: E402
+pytestmark = pytest.mark.requirement("SEMANTIC-PUBLICATION-UX")
 
 
 def _make_manifest(nodes: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -396,6 +392,88 @@ class TestSensitiveFieldPublication:
             }
         ]
 
+    def test_flat_safe_for_publication_does_not_permit_sensitive_source(
+        self, tmp_path: Path
+    ) -> None:
+        """Only the canonical nested policy shape permits sensitive source publication."""
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    columns={
+                        "public_segment": _make_column(
+                            "public_segment",
+                            "varchar",
+                            meta={"sensitive": True},
+                        ),
+                    },
+                    meta=_semantic_meta(
+                        publish=True,
+                        dimensions={
+                            "public_segment": {
+                                "source": "public_segment",
+                                "type": "string",
+                                "safe_for_publication": True,
+                            },
+                        },
+                    ),
+                )
+            }
+        )
+
+        cube = _generate_single_cube(tmp_path, manifest)
+
+        assert cube["dimensions"] == []
+
+    @pytest.mark.parametrize(
+        ("column_meta", "expected_name"),
+        [
+            pytest.param({"pii": True}, "pii_segment", id="pii"),
+            pytest.param({"contains_pii": True}, "contains_pii_segment", id="contains-pii"),
+            pytest.param({"masked": True}, "masked_segment", id="masked"),
+            pytest.param({"classification": "pii"}, "classified_segment", id="classification"),
+            pytest.param(
+                {"policy": {"sensitivity": "confidential"}},
+                "policy_segment",
+                id="policy-sensitivity",
+            ),
+        ],
+    )
+    def test_sensitive_column_metadata_variants_block_publication(
+        self,
+        tmp_path: Path,
+        column_meta: dict[str, Any],
+        expected_name: str,
+    ) -> None:
+        """Supported dbt metadata variants block publication without a safe policy."""
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    columns={
+                        expected_name: _make_column(
+                            expected_name,
+                            "varchar",
+                            meta=column_meta,
+                        ),
+                    },
+                    meta=_semantic_meta(
+                        publish=True,
+                        dimensions={
+                            expected_name: {
+                                "source": expected_name,
+                                "type": "string",
+                            },
+                        },
+                    ),
+                )
+            }
+        )
+
+        cube = _generate_single_cube(tmp_path, manifest)
+
+        assert cube["dimensions"] == []
+
 
 class TestExplicitJoinsAndPreAggregations:
     """Test joins and pre-aggregations remain explicit publication metadata."""
@@ -575,6 +653,38 @@ class TestExplicitJoinsAndPreAggregations:
         output_dir.mkdir()
 
         with pytest.raises(SchemaGenerationError, match="unpublished model"):
+            CubeSchemaGenerator().generate(manifest_path, output_dir)
+
+    def test_join_sql_rejects_statement_separators(self, tmp_path: Path) -> None:
+        """Join SQL must stay a join expression, not a multi-statement payload."""
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    meta=_semantic_meta(publish=True),
+                ),
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    meta=_semantic_meta(
+                        publish=True,
+                        joins={
+                            "customers": {
+                                "sql": (
+                                    "{orders}.customer_id = {customers}.customer_id; "
+                                    "DROP TABLE users"
+                                ),
+                                "relationship": "belongs_to",
+                            }
+                        },
+                    ),
+                ),
+            }
+        )
+        manifest_path = _write_manifest(tmp_path, manifest)
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        with pytest.raises(SchemaGenerationError, match="unsafe SQL token"):
             CubeSchemaGenerator().generate(manifest_path, output_dir)
 
 

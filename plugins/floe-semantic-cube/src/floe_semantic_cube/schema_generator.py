@@ -42,6 +42,7 @@ _SENSITIVE_NAME_PARTS: frozenset[str] = frozenset(
 _SENSITIVE_CLASSIFICATIONS: frozenset[str] = frozenset(
     {"confidential", "masked", "pii", "sensitive"}
 )
+_UNSAFE_JOIN_SQL_TOKENS: tuple[str, ...] = (";", "--", "/*", "*/")
 
 
 class CubeSchemaGenerator:
@@ -364,7 +365,6 @@ class CubeSchemaGenerator:
         Returns:
             List of Cube join definitions.
         """
-        _ = all_models
         joins_config = self._member_configs(semantic, "joins")
         published_model_names = {published_model["name"] for published_model in all_models}
         joins: list[dict[str, Any]] = []
@@ -376,6 +376,7 @@ class CubeSchemaGenerator:
                 )
 
             join_sql = self._required_string(config, "sql", "join", name)
+            self._validate_join_sql(model, name, join_sql)
             relationship = config.get("relationship", "belongs_to")
             if not isinstance(relationship, str) or relationship not in _JOIN_RELATIONSHIPS:
                 raise SchemaGenerationError(
@@ -386,6 +387,15 @@ class CubeSchemaGenerator:
             joins.append({"name": name, "sql": join_sql, "relationship": relationship})
 
         return joins
+
+    def _validate_join_sql(self, model: dict[str, Any], name: str, join_sql: str) -> None:
+        """Reject tokens that would turn a join expression into a SQL statement."""
+        for token in _UNSAFE_JOIN_SQL_TOKENS:
+            if token in join_sql:
+                raise SchemaGenerationError(
+                    f"Semantic join '{name}' contains unsafe SQL token '{token}'",
+                    model_name=model.get("name"),
+                )
 
     def _make_pre_aggregations(
         self,
@@ -617,11 +627,12 @@ class CubeSchemaGenerator:
         policy = config.get("policy", {})
         if isinstance(policy, dict) and policy.get("safe_for_publication") is True:
             return True
-        return config.get("safe_for_publication") is True
+        return False
 
     def _has_sensitive_name(self, name: str) -> bool:
         """Return True when a field name looks like direct personal data."""
         normalized = name.lower()
+        # Deliberately conservative: ambiguous names require explicit safe policy.
         return any(part in normalized for part in _SENSITIVE_NAME_PARTS)
 
     def _has_sensitive_column_meta(self, column_meta: Any) -> bool:
@@ -637,6 +648,7 @@ class CubeSchemaGenerator:
             return True
         if column_meta.get("contains_pii") is True:
             return True
+        # dbt masking_policy values are string policy names; any non-empty value is sensitive.
         if column_meta.get("masking_policy"):
             return True
 
