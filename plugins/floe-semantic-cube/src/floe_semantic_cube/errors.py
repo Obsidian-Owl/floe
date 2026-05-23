@@ -103,3 +103,12 @@ class CubeDatasourceError(CubeSemanticError):
         self.compute_type = compute_type
         detail = f" (compute: {compute_type})" if compute_type else ""
         super().__init__(f"{message}{detail}")
+
+
+class CubeRuntimeConfigError(CubeSemanticError):
+    """Error while rendering Cube runtime configuration from semantic bindings.
+
+    Raised when a provider-neutral semantic deployment binding cannot be
+    translated into Cube environment/configuration without violating the
+    adapter contract.
+    """
