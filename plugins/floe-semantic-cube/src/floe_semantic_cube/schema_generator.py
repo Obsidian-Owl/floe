@@ -718,7 +718,7 @@ class CubeSchemaGenerator:
         for part in _SENSITIVE_NAME_PARTS:
             part_tokens = part.split("_")
             if len(part_tokens) == 1:
-                if tokens and tokens[-1] == part_tokens[0]:
+                if part_tokens[0] in tokens:
                     return True
                 continue
             for index in range(0, len(tokens) - len(part_tokens) + 1):

@@ -569,6 +569,42 @@ class TestSensitiveFieldPublication:
             "adobe_tracking",
         ]
 
+    def test_sensitive_tokens_in_any_position_block_publication(self, tmp_path: Path) -> None:
+        """Sensitive-name matching blocks tokenized PII names in any position."""
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    columns={
+                        "phone_number": _make_column("phone_number", "varchar"),
+                        "email_hash": _make_column("email_hash", "varchar"),
+                        "customer_phone_value": _make_column("customer_phone_value", "varchar"),
+                    },
+                    meta=_semantic_meta(
+                        publish=True,
+                        dimensions={
+                            "phone_number": {
+                                "source": "phone_number",
+                                "type": "string",
+                            },
+                            "email_hash": {
+                                "source": "email_hash",
+                                "type": "string",
+                            },
+                            "customer_phone_value": {
+                                "source": "customer_phone_value",
+                                "type": "string",
+                            },
+                        },
+                    ),
+                )
+            }
+        )
+
+        cube = _generate_single_cube(tmp_path, manifest)
+
+        assert cube["dimensions"] == []
+
     def test_blocked_member_is_logged(
         self,
         tmp_path: Path,
