@@ -234,7 +234,9 @@ class CubeSchemaGenerator:
             semantic,
             published_measures={measure["name"] for measure in measures},
             published_dimensions={dimension["name"] for dimension in standard_dimensions},
-            published_time_dimensions={dimension["name"] for dimension in time_dimensions},
+            published_time_dimensions={
+                dimension["name"] for dimension in dimensions if dimension["type"] == "time"
+            },
         )
         if pre_aggs:
             cube["pre_aggregations"] = pre_aggs
@@ -713,7 +715,8 @@ class CubeSchemaGenerator:
 
     def _has_sensitive_name(self, name: str) -> bool:
         """Return True when a field name looks like direct personal data."""
-        normalized = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name).lower()
+        normalized = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", "_", name)
+        normalized = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", normalized).lower()
         tokens = [token for token in re.split(r"[^a-z0-9]+", normalized) if token]
         for part in _SENSITIVE_NAME_PARTS:
             part_tokens = part.split("_")

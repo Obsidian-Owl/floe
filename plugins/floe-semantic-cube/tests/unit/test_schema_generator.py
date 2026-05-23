@@ -641,6 +641,37 @@ class TestSensitiveFieldPublication:
 
         assert cube["dimensions"] == []
 
+    def test_acronym_style_sensitive_tokens_block_publication(self, tmp_path: Path) -> None:
+        """Sensitive-name matching splits acronym runs in camelCase PII names."""
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    columns={
+                        "customerSSNHash": _make_column("customerSSNHash", "varchar"),
+                        "DOBValue": _make_column("DOBValue", "date"),
+                    },
+                    meta=_semantic_meta(
+                        publish=True,
+                        dimensions={
+                            "customerSSNHash": {
+                                "source": "customerSSNHash",
+                                "type": "string",
+                            },
+                            "DOBValue": {
+                                "source": "DOBValue",
+                                "type": "time",
+                            },
+                        },
+                    ),
+                )
+            }
+        )
+
+        cube = _generate_single_cube(tmp_path, manifest)
+
+        assert cube["dimensions"] == []
+
     def test_blocked_member_is_logged(
         self,
         tmp_path: Path,
@@ -821,6 +852,52 @@ class TestExplicitJoinsAndPreAggregations:
 
         with pytest.raises(SchemaGenerationError, match="unpublished dimension"):
             CubeSchemaGenerator().generate(manifest_path, output_dir)
+
+    def test_pre_aggregation_time_dimension_accepts_published_time_typed_dimension(
+        self, tmp_path: Path
+    ) -> None:
+        """Pre-aggregation time dimensions may reference dimensions with type=time."""
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={
+                        "revenue": _make_column("revenue", "decimal"),
+                        "order_date": _make_column("order_date", "date"),
+                    },
+                    meta=_semantic_meta(
+                        publish=True,
+                        measures={"total_revenue": {"source": "revenue", "type": "sum"}},
+                        dimensions={
+                            "order_date": {
+                                "source": "order_date",
+                                "type": "time",
+                            }
+                        },
+                        pre_aggregations={
+                            "daily_revenue": {
+                                "type": "rollup",
+                                "measures": ["total_revenue"],
+                                "time_dimension": "order_date",
+                                "granularity": "day",
+                            }
+                        },
+                    ),
+                )
+            }
+        )
+
+        cube = _generate_single_cube(tmp_path, manifest)
+
+        assert cube["pre_aggregations"] == [
+            {
+                "name": "daily_revenue",
+                "type": "rollup",
+                "measures": ["total_revenue"],
+                "time_dimension": "order_date",
+                "granularity": "day",
+            }
+        ]
 
     def test_pre_aggregation_member_lists_cannot_be_null(self, tmp_path: Path) -> None:
         """Pre-aggregation member lists must be explicit lists when present."""
