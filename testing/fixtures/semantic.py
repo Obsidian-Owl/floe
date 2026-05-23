@@ -168,7 +168,7 @@ def sample_dbt_manifest(tmp_path: Path) -> Path:
 
     The manifest follows the dbt manifest v12 schema with three models:
     - customers: Basic customer dimension table
-    - orders: Order fact table with numeric measures
+    - orders: Published order fact table with explicit semantic metadata
     - order_items: Detail table with foreign key relationships
 
     Args:
@@ -253,7 +253,28 @@ def sample_dbt_manifest(tmp_path: Path) -> Path:
                         "meta": {},
                     },
                 },
-                "meta": {},
+                "meta": _semantic_meta(
+                    publish=True,
+                    measures={
+                        "total_order_amount": {
+                            "source": "order_total",
+                            "type": "sum",
+                        }
+                    },
+                    dimensions={
+                        "order_status": {
+                            "source": "status",
+                            "type": "string",
+                        }
+                    },
+                    time_dimensions={
+                        "order_date": {
+                            "source": "order_date",
+                            "granularities": ["day", "month"],
+                        }
+                    },
+                    validation_metrics=["total_order_amount"],
+                ),
                 "tags": ["analytics", "cube"],
                 "config": {"materialized": "table"},
             },

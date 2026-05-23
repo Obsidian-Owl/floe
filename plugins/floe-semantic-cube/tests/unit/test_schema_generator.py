@@ -12,8 +12,8 @@ from typing import Any
 
 import pytest
 import yaml
-from testing.fixtures.semantic import customer_360_semantic_manifest
 
+from floe_semantic_cube import schema_generator as schema_generator_module
 from floe_semantic_cube.errors import SchemaGenerationError
 from floe_semantic_cube.schema_generator import CubeSchemaGenerator
 
@@ -87,6 +87,61 @@ def _read_generated_yaml(path: Path) -> dict[str, Any]:
     content = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert isinstance(content, dict)
     return content
+
+
+def _customer_360_semantic_manifest() -> dict[str, Any]:
+    """Build a Customer 360 manifest with explicit semantic publication."""
+    return _make_manifest(
+        {
+            "model.analytics.mart_customer_360": _make_model(
+                "mart_customer_360",
+                columns={
+                    "customer_id": _make_column("customer_id", "integer"),
+                    "lifetime_value": _make_column("lifetime_value", "decimal"),
+                    "is_active": _make_column("is_active", "boolean"),
+                    "segment": _make_column("segment", "varchar"),
+                    "signup_date": _make_column("signup_date", "date"),
+                    "email": _make_column("email", "varchar", meta={"sensitive": True}),
+                    "phone": _make_column("phone", "varchar", meta={"sensitive": True}),
+                    "address": _make_column(
+                        "address",
+                        "varchar",
+                        meta={"masking_policy": "mask_address"},
+                    ),
+                    "ssn_hash": _make_column("ssn_hash", "varchar", meta={"sensitive": True}),
+                    "internal_risk_score": _make_column("internal_risk_score", "decimal"),
+                },
+                meta=_semantic_meta(
+                    publish=True,
+                    measures={
+                        "total_lifetime_value": {
+                            "source": "lifetime_value",
+                            "type": "sum",
+                        },
+                        "active_customer_count": {
+                            "source": "customer_id",
+                            "type": "count_distinct",
+                            "filters": [{"sql": "{CUBE}.is_active = true"}],
+                        },
+                    },
+                    dimensions={
+                        "customer_segment": {
+                            "source": "segment",
+                            "type": "string",
+                        }
+                    },
+                    time_dimensions={
+                        "signup_date": {
+                            "source": "signup_date",
+                            "granularities": ["day", "month"],
+                        }
+                    },
+                    validation_metrics=["total_lifetime_value", "active_customer_count"],
+                ),
+                tags=["analytics", "semantic"],
+            ),
+        }
+    )
 
 
 def _generate_single_cube(tmp_path: Path, manifest: dict[str, Any]) -> dict[str, Any]:
@@ -221,7 +276,7 @@ class TestDenyByDefaultPublication:
         self, tmp_path: Path
     ) -> None:
         """Customer 360 publishes public semantics without email or masked fields."""
-        cube = _generate_single_cube(tmp_path, customer_360_semantic_manifest())
+        cube = _generate_single_cube(tmp_path, _customer_360_semantic_manifest())
 
         measure_names = {member["name"] for member in cube["measures"]}
         dimension_names = {member["name"] for member in cube["dimensions"]}
@@ -474,6 +529,99 @@ class TestSensitiveFieldPublication:
 
         assert cube["dimensions"] == []
 
+    def test_benign_names_with_sensitive_substrings_are_published(self, tmp_path: Path) -> None:
+        """Sensitive-name matching does not block substrings inside larger words."""
+        manifest = _make_manifest(
+            {
+                "model.analytics.campaign_metrics": _make_model(
+                    "campaign_metrics",
+                    columns={
+                        "readdress_flag": _make_column("readdress_flag", "boolean"),
+                        "microphone_type": _make_column("microphone_type", "varchar"),
+                        "adobe_tracking": _make_column("adobe_tracking", "varchar"),
+                    },
+                    meta=_semantic_meta(
+                        publish=True,
+                        dimensions={
+                            "readdress_flag": {
+                                "source": "readdress_flag",
+                                "type": "boolean",
+                            },
+                            "microphone_type": {
+                                "source": "microphone_type",
+                                "type": "string",
+                            },
+                            "adobe_tracking": {
+                                "source": "adobe_tracking",
+                                "type": "string",
+                            },
+                        },
+                    ),
+                )
+            }
+        )
+
+        cube = _generate_single_cube(tmp_path, manifest)
+
+        assert [dimension["name"] for dimension in cube["dimensions"]] == [
+            "readdress_flag",
+            "microphone_type",
+            "adobe_tracking",
+        ]
+
+    def test_blocked_member_is_logged(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Blocked semantic members produce a diagnostic log event."""
+
+        class RecordingLogger:
+            def __init__(self) -> None:
+                self.info_events: list[tuple[str, dict[str, Any]]] = []
+
+            def debug(self, event: str, **kwargs: Any) -> None:
+                pass
+
+            def info(self, event: str, **kwargs: Any) -> None:
+                self.info_events.append((event, kwargs))
+
+        recorder = RecordingLogger()
+        monkeypatch.setattr(schema_generator_module, "logger", recorder)
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    columns={
+                        "email": _make_column("email", "varchar"),
+                    },
+                    meta=_semantic_meta(
+                        publish=True,
+                        dimensions={
+                            "customer_email": {
+                                "source": "email",
+                                "type": "string",
+                            }
+                        },
+                    ),
+                )
+            }
+        )
+
+        _generate_single_cube(tmp_path, manifest)
+
+        blocked_events = [
+            kwargs for event, kwargs in recorder.info_events if event == "semantic_member_blocked"
+        ]
+        assert blocked_events == [
+            {
+                "model": "customers",
+                "member": "customer_email",
+                "source": "email",
+                "reason": "sensitive_member_name",
+            }
+        ]
+
 
 class TestExplicitJoinsAndPreAggregations:
     """Test joins and pre-aggregations remain explicit publication metadata."""
@@ -532,7 +680,7 @@ class TestExplicitJoinsAndPreAggregations:
                         joins={
                             "customers": {
                                 "sql": "{orders}.customer_id = {customers}.customer_id",
-                                "relationship": "belongs_to",
+                                "relationship": "many_to_one",
                             }
                         },
                         pre_aggregations={
@@ -553,7 +701,7 @@ class TestExplicitJoinsAndPreAggregations:
             {
                 "name": "customers",
                 "sql": "{orders}.customer_id = {customers}.customer_id",
-                "relationship": "belongs_to",
+                "relationship": "many_to_one",
             }
         ]
         assert cube["pre_aggregations"] == [
@@ -678,6 +826,127 @@ class TestExplicitJoinsAndPreAggregations:
                         },
                     ),
                 ),
+            }
+        )
+        manifest_path = _write_manifest(tmp_path, manifest)
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        with pytest.raises(SchemaGenerationError, match="unsafe SQL token"):
+            CubeSchemaGenerator().generate(manifest_path, output_dir)
+
+    def test_join_relationship_defaults_to_canonical_many_to_one(self, tmp_path: Path) -> None:
+        """Generated joins use Cube's canonical many_to_one default."""
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    meta=_semantic_meta(publish=True),
+                ),
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    meta=_semantic_meta(
+                        publish=True,
+                        joins={
+                            "customers": {
+                                "sql": "{orders}.customer_id = {customers}.customer_id",
+                            }
+                        },
+                    ),
+                ),
+            }
+        )
+
+        cube = _generate_cube_by_name(tmp_path, manifest, "orders")
+
+        assert cube["joins"] == [
+            {
+                "name": "customers",
+                "sql": "{orders}.customer_id = {customers}.customer_id",
+                "relationship": "many_to_one",
+            }
+        ]
+
+    def test_join_relationship_accepts_legacy_aliases_as_canonical_values(
+        self, tmp_path: Path
+    ) -> None:
+        """Legacy Cube relationship aliases are accepted and normalized."""
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    meta=_semantic_meta(publish=True),
+                ),
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    meta=_semantic_meta(
+                        publish=True,
+                        joins={
+                            "customers": {
+                                "sql": "{orders}.customer_id = {customers}.customer_id",
+                                "relationship": "belongs_to",
+                            }
+                        },
+                    ),
+                ),
+            }
+        )
+
+        cube = _generate_cube_by_name(tmp_path, manifest, "orders")
+
+        assert cube["joins"] == [
+            {
+                "name": "customers",
+                "sql": "{orders}.customer_id = {customers}.customer_id",
+                "relationship": "many_to_one",
+            }
+        ]
+
+    def test_member_filters_must_be_lists_of_mappings(self, tmp_path: Path) -> None:
+        """Member filters must use Cube's list-of-objects shape."""
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={"revenue": _make_column("revenue", "decimal")},
+                    meta=_semantic_meta(
+                        publish=True,
+                        measures={
+                            "total_revenue": {
+                                "source": "revenue",
+                                "type": "sum",
+                                "filters": "{CUBE}.is_active = true",
+                            }
+                        },
+                    ),
+                )
+            }
+        )
+        manifest_path = _write_manifest(tmp_path, manifest)
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        with pytest.raises(SchemaGenerationError, match="filters must be a list"):
+            CubeSchemaGenerator().generate(manifest_path, output_dir)
+
+    def test_member_filter_sql_rejects_statement_separators(self, tmp_path: Path) -> None:
+        """Filter SQL must stay a predicate expression, not a multi-statement payload."""
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={"revenue": _make_column("revenue", "decimal")},
+                    meta=_semantic_meta(
+                        publish=True,
+                        measures={
+                            "total_revenue": {
+                                "source": "revenue",
+                                "type": "sum",
+                                "filters": [{"sql": "{CUBE}.is_active = true; DROP TABLE users"}],
+                            }
+                        },
+                    ),
+                )
             }
         )
         manifest_path = _write_manifest(tmp_path, manifest)

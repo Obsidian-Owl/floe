@@ -9,6 +9,7 @@ Publication is deny-by-default: only models with
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +24,17 @@ _MEASURE_TYPES: frozenset[str] = frozenset(
     {"avg", "count", "count_distinct", "max", "min", "number", "sum"}
 )
 _DIMENSION_TYPES: frozenset[str] = frozenset({"boolean", "number", "string", "time"})
-_JOIN_RELATIONSHIPS: frozenset[str] = frozenset({"belongs_to", "has_many", "has_one"})
+_JOIN_RELATIONSHIP_ALIASES: dict[str, str] = {
+    "many_to_one": "many_to_one",
+    "belongs_to": "many_to_one",
+    "belongsTo": "many_to_one",
+    "one_to_many": "one_to_many",
+    "has_many": "one_to_many",
+    "hasMany": "one_to_many",
+    "one_to_one": "one_to_one",
+    "has_one": "one_to_one",
+    "hasOne": "one_to_one",
+}
 _PRE_AGGREGATION_TYPES: frozenset[str] = frozenset({"rollup", "rollup_join"})
 _SENSITIVE_NAME_PARTS: frozenset[str] = frozenset(
     {
@@ -43,6 +54,7 @@ _SENSITIVE_CLASSIFICATIONS: frozenset[str] = frozenset(
     {"confidential", "masked", "pii", "sensitive"}
 )
 _UNSAFE_JOIN_SQL_TOKENS: tuple[str, ...] = (";", "--", "/*", "*/")
+_DEFAULT_JOIN_RELATIONSHIP = "many_to_one"
 
 
 class CubeSchemaGenerator:
@@ -334,7 +346,15 @@ class CubeSchemaGenerator:
         """Create a Cube member unless privacy metadata blocks publication."""
         source = self._required_string(config, "source", member_kind, name)
         self._validate_source_column(model, source, member_kind, name)
-        if self._is_publication_blocked(model, name, source, config):
+        block_reason = self._publication_block_reason(model, name, source, config)
+        if block_reason is not None:
+            logger.info(
+                "semantic_member_blocked",
+                model=model.get("name"),
+                member=name,
+                source=source,
+                reason=block_reason,
+            )
             return None
 
         member: dict[str, Any] = {
@@ -343,9 +363,11 @@ class CubeSchemaGenerator:
             "sql": source,
         }
 
-        for key in ("description", "filters", "format"):
+        for key in ("description", "format"):
             if key in config:
                 member[key] = config[key]
+        if "filters" in config:
+            member["filters"] = self._validate_member_filters(model, name, config["filters"])
 
         return member
 
@@ -377,23 +399,71 @@ class CubeSchemaGenerator:
 
             join_sql = self._required_string(config, "sql", "join", name)
             self._validate_join_sql(model, name, join_sql)
-            relationship = config.get("relationship", "belongs_to")
-            if not isinstance(relationship, str) or relationship not in _JOIN_RELATIONSHIPS:
-                raise SchemaGenerationError(
-                    f"Unsupported join relationship '{relationship}' for semantic join '{name}'",
-                    model_name=model.get("name"),
-                )
+            relationship = self._normalize_join_relationship(model, name, config)
 
             joins.append({"name": name, "sql": join_sql, "relationship": relationship})
 
         return joins
 
+    def _normalize_join_relationship(
+        self,
+        model: dict[str, Any],
+        name: str,
+        config: dict[str, Any],
+    ) -> str:
+        """Return a canonical Cube relationship value for a semantic join."""
+        relationship = config.get("relationship", _DEFAULT_JOIN_RELATIONSHIP)
+        if not isinstance(relationship, str) or relationship not in _JOIN_RELATIONSHIP_ALIASES:
+            raise SchemaGenerationError(
+                f"Unsupported join relationship '{relationship}' for semantic join '{name}'",
+                model_name=model.get("name"),
+            )
+        return _JOIN_RELATIONSHIP_ALIASES[relationship]
+
     def _validate_join_sql(self, model: dict[str, Any], name: str, join_sql: str) -> None:
         """Reject tokens that would turn a join expression into a SQL statement."""
-        for token in _UNSAFE_JOIN_SQL_TOKENS:
-            if token in join_sql:
+        self._validate_sql_expression(model, name, "join", join_sql)
+
+    def _validate_member_filters(
+        self,
+        model: dict[str, Any],
+        name: str,
+        filters: Any,
+    ) -> list[dict[str, Any]]:
+        """Validate Cube filter metadata before passing it through."""
+        if not isinstance(filters, list) or not all(
+            isinstance(filter_config, dict) for filter_config in filters
+        ):
+            raise SchemaGenerationError(
+                f"Semantic member '{name}' filters must be a list of objects",
+                model_name=model.get("name"),
+            )
+
+        for filter_config in filters:
+            sql = filter_config.get("sql")
+            if sql is None:
+                continue
+            if not isinstance(sql, str) or not sql:
                 raise SchemaGenerationError(
-                    f"Semantic join '{name}' contains unsafe SQL token '{token}'",
+                    f"Semantic member '{name}' filter sql must be a non-empty string",
+                    model_name=model.get("name"),
+                )
+            self._validate_sql_expression(model, name, "filter", sql)
+
+        return filters
+
+    def _validate_sql_expression(
+        self,
+        model: dict[str, Any],
+        name: str,
+        expression_kind: str,
+        sql: str,
+    ) -> None:
+        """Reject tokens that would turn a SQL expression into a statement."""
+        for token in _UNSAFE_JOIN_SQL_TOKENS:
+            if token in sql:
+                raise SchemaGenerationError(
+                    f"Semantic {expression_kind} '{name}' contains unsafe SQL token '{token}'",
                     model_name=model.get("name"),
                 )
 
@@ -609,18 +679,30 @@ class CubeSchemaGenerator:
         config: dict[str, Any],
     ) -> bool:
         """Return True when a member points at a sensitive source without policy."""
+        return self._publication_block_reason(model, member_name, source, config) is not None
+
+    def _publication_block_reason(
+        self,
+        model: dict[str, Any],
+        member_name: str,
+        source: str,
+        config: dict[str, Any],
+    ) -> str | None:
+        """Return why publication is blocked, or None when publication is allowed."""
         if self._has_safe_publication_policy(config):
-            return False
+            return None
 
         columns = model.get("columns", {})
         column_info = columns.get(source, {}) if isinstance(columns, dict) else {}
         column_meta = column_info.get("meta", {}) if isinstance(column_info, dict) else {}
 
-        return (
-            self._has_sensitive_name(member_name)
-            or self._has_sensitive_name(source)
-            or self._has_sensitive_column_meta(column_meta)
-        )
+        if self._has_sensitive_name(member_name):
+            return "sensitive_member_name"
+        if self._has_sensitive_name(source):
+            return "sensitive_source_name"
+        if self._has_sensitive_column_meta(column_meta):
+            return "sensitive_column_metadata"
+        return None
 
     def _has_safe_publication_policy(self, config: dict[str, Any]) -> bool:
         """Return True when member metadata explicitly permits publication."""
@@ -632,8 +714,17 @@ class CubeSchemaGenerator:
     def _has_sensitive_name(self, name: str) -> bool:
         """Return True when a field name looks like direct personal data."""
         normalized = name.lower()
-        # Deliberately conservative: ambiguous names require explicit safe policy.
-        return any(part in normalized for part in _SENSITIVE_NAME_PARTS)
+        tokens = [token for token in re.split(r"[^a-z0-9]+", normalized) if token]
+        for part in _SENSITIVE_NAME_PARTS:
+            part_tokens = part.split("_")
+            if len(part_tokens) == 1:
+                if tokens and tokens[-1] == part_tokens[0]:
+                    return True
+                continue
+            for index in range(0, len(tokens) - len(part_tokens) + 1):
+                if tokens[index : index + len(part_tokens)] == part_tokens:
+                    return True
+        return False
 
     def _has_sensitive_column_meta(self, column_meta: Any) -> bool:
         """Return True when dbt column metadata marks a source as sensitive."""
