@@ -325,6 +325,32 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
         with pytest.raises(CubeSemanticError, match="duplicate service endpoint names"):
             plugin.render_runtime_config(binding)
 
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-018")
+    def test_render_runtime_config_rejects_credential_bearing_service_endpoint_url(
+        self, plugin: CubeSemanticPlugin
+    ) -> None:
+        """Test service endpoint URLs are revalidated before runtime rendering."""
+        binding = _semantic_binding(
+            service_endpoints=[
+                SemanticServiceEndpointBinding.model_construct(
+                    name="cube-api",
+                    url="http://user:pass@cube:4000",  # pragma: allowlist secret
+                    api_families=["metadata", "query", "sql_http", "graphql", "health"],
+                    config={},
+                    env_refs={},
+                    credential_refs={},
+                ),
+                SemanticServiceEndpointBinding(
+                    name="cube-sql",
+                    url="cube-sql:15432",
+                    api_families=["sql_wire"],
+                ),
+            ]
+        )
+
+        with pytest.raises(CubeSemanticError, match="service_endpoints.cube-api.url"):
+            plugin.render_runtime_config(binding)
+
     @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-008")
     def test_render_runtime_config_requires_endpoint_for_each_api(
         self, plugin: CubeSemanticPlugin
@@ -363,6 +389,32 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
         )
 
         with pytest.raises(CubeSemanticError, match="sql_wire requires credential_refs"):
+            plugin.render_runtime_config(binding)
+
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-019")
+    @pytest.mark.parametrize("port", [[], 0, 70000])
+    def test_render_runtime_config_rejects_invalid_sql_wire_port(
+        self, plugin: CubeSemanticPlugin, port: object
+    ) -> None:
+        """Test SQL wire port rendering fails fast for non-TCP-port values."""
+        binding = _semantic_binding(
+            apis=[
+                SemanticApiBinding.model_construct(
+                    family="sql_wire",
+                    endpoint_name="cube-sql",
+                    path=None,
+                    protocol="postgres-wire",
+                    config={"port": port},
+                    env_refs={},
+                    credential_refs={
+                        "user": _credential_ref("username", name="cube-sql"),
+                        "password": _credential_ref("password", name="cube-sql"),
+                    },
+                )
+            ]
+        )
+
+        with pytest.raises(CubeSemanticError, match="apis.sql_wire.config.port"):
             plugin.render_runtime_config(binding)
 
     @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-017")
@@ -781,6 +833,7 @@ def _semantic_binding(
     *,
     provider: str = "cube",
     datasources: list[SemanticDatasourceBinding] | None = None,
+    service_endpoints: list[SemanticServiceEndpointBinding] | None = None,
     apis: list[SemanticApiBinding] | None = None,
     config: dict[str, object] | None = None,
     service_endpoint_config: dict[str, object] | None = None,
@@ -791,7 +844,9 @@ def _semantic_binding(
     return SemanticDeploymentBinding(
         provider=provider,
         datasources=datasources if datasources is not None else [_duckdb_datasource()],
-        service_endpoints=[
+        service_endpoints=service_endpoints
+        if service_endpoints is not None
+        else [
             SemanticServiceEndpointBinding(
                 name="cube-api",
                 url="http://cube:4000",

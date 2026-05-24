@@ -20,6 +20,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 import httpx
 import structlog
@@ -545,7 +546,7 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
             port = sql_wire_api.config.get("port")
             if port is None:
                 raise CubeRuntimeConfigError("sql_wire requires config.port for CUBEJS_PG_SQL_PORT")
-            env["CUBEJS_PG_SQL_PORT"] = str(port)
+            env["CUBEJS_PG_SQL_PORT"] = str(_validate_tcp_port(port, "apis.sql_wire.config.port"))
 
         return env
 
@@ -643,12 +644,46 @@ def _service_endpoints_by_name(
         if endpoint.name in seen:
             duplicates.add(endpoint.name)
         seen.add(endpoint.name)
+        _assert_no_endpoint_url_credentials(
+            endpoint.url,
+            f"service_endpoints.{endpoint.name}.url",
+        )
     if duplicates:
         raise CubeRuntimeConfigError(
             f"duplicate service endpoint names: {sorted(duplicates)}",
             fragment="service_endpoints",
         )
     return {endpoint.name: endpoint for endpoint in service_endpoints}
+
+
+def _assert_no_endpoint_url_credentials(value: Any, path: str) -> None:
+    """Reject service endpoint URLs that embed credential material."""
+    if not isinstance(value, str) or not value:
+        raise CubeRuntimeConfigError(
+            f"{path} must be a non-empty string",
+            fragment=path,
+        )
+    parsed = urlsplit(value)
+    if parsed.username is not None or parsed.password is not None:
+        raise CubeRuntimeConfigError(
+            f"{path} must not include embedded credentials",
+            fragment=path,
+        )
+
+
+def _validate_tcp_port(value: Any, path: str) -> int:
+    """Validate an environment-projected TCP port value."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise CubeRuntimeConfigError(
+            f"{path} must be an integer TCP port",
+            fragment=path,
+        )
+    if value < 1 or value > 65535:
+        raise CubeRuntimeConfigError(
+            f"{path} must be a valid TCP port between 1 and 65535",
+            fragment=path,
+        )
+    return value
 
 
 def _find_api(apis: list[SemanticApiBinding], family: str) -> SemanticApiBinding | None:
