@@ -20,7 +20,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 import httpx
 import structlog
@@ -72,6 +72,20 @@ _API_PATHS: dict[str, str] = {
 _SECRET_VALUE_MARKERS: tuple[str, ...] = (
     "raw-secret-value",
     "secret-value",
+)
+_URL_CREDENTIAL_QUERY_KEYS: frozenset[str] = frozenset(
+    {
+        "accesskey",
+        "accesstoken",
+        "apikey",
+        "clientsecret",
+        "credential",
+        "credentials",
+        "password",
+        "secret",
+        "signature",
+        "token",
+    }
 )
 
 
@@ -669,6 +683,20 @@ def _assert_no_endpoint_url_credentials(value: Any, path: str) -> None:
             f"{path} must not include embedded credentials",
             fragment=path,
         )
+    for section, params in (
+        ("query", parse_qsl(parsed.query, keep_blank_values=True)),
+        ("fragment", parse_qsl(parsed.fragment, keep_blank_values=True)),
+    ):
+        for key, param_value in params:
+            normalized_key = "".join(character for character in key.lower() if character.isalnum())
+            if normalized_key in _URL_CREDENTIAL_QUERY_KEYS or any(
+                marker in normalized_key for marker in _URL_CREDENTIAL_QUERY_KEYS
+            ):
+                raise CubeRuntimeConfigError(
+                    f"{path} {section} must not include credential-bearing parameters",
+                    fragment=path,
+                )
+            _assert_no_sentinel_secret_markers(param_value, f"{path}.{section}")
 
 
 def _validate_tcp_port(value: Any, path: str) -> int:

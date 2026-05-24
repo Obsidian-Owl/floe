@@ -351,6 +351,39 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
         with pytest.raises(CubeSemanticError, match="service_endpoints.cube-api.url"):
             plugin.render_runtime_config(binding)
 
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-020")
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://cube:4000?api_key=raw-secret-value",
+            "https://cube:4000#token=raw-secret-value",
+        ],
+    )
+    def test_render_runtime_config_rejects_secret_endpoint_url_parameters(
+        self, plugin: CubeSemanticPlugin, url: str
+    ) -> None:
+        """Test service endpoint URL query and fragment credentials fail fast."""
+        binding = _semantic_binding(
+            service_endpoints=[
+                SemanticServiceEndpointBinding.model_construct(
+                    name="cube-api",
+                    url=url,  # pragma: allowlist secret
+                    api_families=["metadata", "query", "sql_http", "graphql", "health"],
+                    config={},
+                    env_refs={},
+                    credential_refs={},
+                ),
+                SemanticServiceEndpointBinding(
+                    name="cube-sql",
+                    url="cube-sql:15432",
+                    api_families=["sql_wire"],
+                ),
+            ]
+        )
+
+        with pytest.raises(CubeSemanticError, match="service_endpoints.cube-api.url"):
+            plugin.render_runtime_config(binding)
+
     @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-008")
     def test_render_runtime_config_requires_endpoint_for_each_api(
         self, plugin: CubeSemanticPlugin
