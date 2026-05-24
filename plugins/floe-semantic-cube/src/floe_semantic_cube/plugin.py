@@ -494,7 +494,10 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
             "driver": datasource.driver,
             "config": dict(datasource.config),
             "env_refs": dict(datasource.env_refs),
-            "credential_refs": _credential_refs_to_dict(datasource.credential_refs),
+            "credential_refs": _credential_refs_to_dict(
+                datasource.credential_refs,
+                f"datasources.{datasource.name}.credential_refs",
+            ),
         }
 
     def _render_environment(
@@ -582,7 +585,10 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
                         "user": "CUBEJS_SQL_USER",
                         "password": "CUBEJS_SQL_PASSWORD",  # pragma: allowlist secret
                     },
-                    "credential_refs": _credential_refs_to_dict(api.credential_refs),
+                    "credential_refs": _credential_refs_to_dict(
+                        api.credential_refs,
+                        f"apis.{api.family}.credential_refs",
+                    ),
                 }
                 continue
 
@@ -607,15 +613,22 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
         """Collect credential references needed by Cube runtime config."""
         credential_refs: dict[str, dict[str, str | None]] = {}
         for datasource in datasources:
-            credential_refs.update(_credential_refs_to_dict(datasource.credential_refs))
+            credential_refs.update(
+                _credential_refs_to_dict(
+                    datasource.credential_refs,
+                    f"datasources.{datasource.name}.credential_refs",
+                )
+            )
         sql_wire_api = _find_api(apis, "sql_wire")
         if sql_wire_api is not None:
             _validate_sql_wire_refs(sql_wire_api)
             credential_refs["sql_user"] = _credential_ref_to_dict(
-                sql_wire_api.credential_refs["user"]
+                sql_wire_api.credential_refs["user"],
+                "apis.sql_wire.credential_refs.user",
             )
             credential_refs["sql_password"] = _credential_ref_to_dict(
-                sql_wire_api.credential_refs["password"]
+                sql_wire_api.credential_refs["password"],
+                "apis.sql_wire.credential_refs.password",
             )
         return credential_refs
 
@@ -750,30 +763,41 @@ def _render_secret_environment_refs(
     for credential_name, env_name in datasource_secret_env_names.items():
         credential_ref = datasource.credential_refs.get(credential_name)
         if credential_ref is not None:
-            secret_env_refs[env_name] = _credential_ref_to_dict(credential_ref)
+            secret_env_refs[env_name] = _credential_ref_to_dict(
+                credential_ref,
+                f"datasources.{datasource.name}.credential_refs.{credential_name}",
+            )
 
     sql_wire_api = _find_api(apis, "sql_wire")
     if sql_wire_api is not None:
         _validate_sql_wire_refs(sql_wire_api)
         secret_env_refs["CUBEJS_SQL_USER"] = _credential_ref_to_dict(
-            sql_wire_api.credential_refs["user"]
+            sql_wire_api.credential_refs["user"],
+            "apis.sql_wire.credential_refs.user",
         )
         secret_env_refs["CUBEJS_SQL_PASSWORD"] = _credential_ref_to_dict(
-            sql_wire_api.credential_refs["password"]
+            sql_wire_api.credential_refs["password"],
+            "apis.sql_wire.credential_refs.password",
         )
     return secret_env_refs
 
 
-def _credential_ref_to_dict(ref: CredentialRef) -> dict[str, str | None]:
+def _credential_ref_to_dict(ref: CredentialRef, path: str) -> dict[str, str | None]:
     """Serialize a credential reference without resolving secret material."""
+    if not isinstance(ref, CredentialRef):
+        raise CubeRuntimeConfigError(
+            f"{path} must be a CredentialRef instance",
+            fragment=path,
+        )
     return {"source": ref.source, "name": ref.name, "key": ref.key}
 
 
 def _credential_refs_to_dict(
     refs: dict[str, CredentialRef],
+    path: str,
 ) -> dict[str, dict[str, str | None]]:
     """Serialize credential reference mapping without secret material."""
-    return {name: _credential_ref_to_dict(ref) for name, ref in refs.items()}
+    return {name: _credential_ref_to_dict(ref, f"{path}.{name}") for name, ref in refs.items()}
 
 
 def _assert_no_sentinel_secret_markers(value: Any, path: str) -> None:

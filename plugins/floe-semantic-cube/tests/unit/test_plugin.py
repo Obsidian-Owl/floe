@@ -365,6 +365,31 @@ class TestCubeSemanticPluginProviderNeutralRuntime:
         with pytest.raises(CubeSemanticError, match="sql_wire requires credential_refs"):
             plugin.render_runtime_config(binding)
 
+    @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-017")
+    def test_render_runtime_config_rejects_malformed_credential_refs(
+        self, plugin: CubeSemanticPlugin
+    ) -> None:
+        """Test malformed credential ref values fail with CubeRuntimeConfigError."""
+        binding = _semantic_binding(
+            apis=[
+                SemanticApiBinding.model_construct(
+                    family="sql_wire",
+                    endpoint_name="cube-sql",
+                    path=None,
+                    protocol="postgres-wire",
+                    config={"port": 15432},
+                    env_refs={},
+                    credential_refs={
+                        "user": "not-a-credential-ref",
+                        "password": _credential_ref("password", name="cube-sql"),
+                    },
+                )
+            ]
+        )
+
+        with pytest.raises(CubeSemanticError, match="credential_refs.user"):
+            plugin.render_runtime_config(binding)
+
     @pytest.mark.requirement("SEMANTIC-CUBE-ADAPTER-010")
     def test_render_runtime_config_rejects_raw_secret_like_values(
         self, plugin: CubeSemanticPlugin
