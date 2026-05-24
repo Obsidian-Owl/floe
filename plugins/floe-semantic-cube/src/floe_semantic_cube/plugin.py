@@ -504,36 +504,34 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
     ) -> dict[str, str]:
         """Render Cube environment variables from binding fragments."""
         env: dict[str, str] = {}
-        if datasources:
-            _ensure_single_datasource(datasources)
-            datasource = datasources[0]
-            config = datasource["config"]
-            env["CUBEJS_DB_TYPE"] = "duckdb"
-            database_path = config.get("database_path")
-            if database_path is None:
-                raise CubeRuntimeConfigError(
-                    "DuckDB datasource requires config.database_path for "
-                    "CUBEJS_DB_DUCKDB_DATABASE_PATH"
-                )
-            env["CUBEJS_DB_DUCKDB_DATABASE_PATH"] = str(database_path)
-            _set_optional_env(
-                env,
-                config=config,
-                config_key="s3_endpoint",
-                env_key="CUBEJS_DB_DUCKDB_S3_ENDPOINT",
+        _ensure_single_datasource(datasources)
+        datasource = datasources[0]
+        config = datasource["config"]
+        env["CUBEJS_DB_TYPE"] = "duckdb"
+        database_path = config.get("database_path")
+        if database_path is None:
+            raise CubeRuntimeConfigError(
+                "DuckDB datasource requires config.database_path for CUBEJS_DB_DUCKDB_DATABASE_PATH"
             )
-            _set_optional_env(
-                env,
-                config=config,
-                config_key="s3_region",
-                env_key="CUBEJS_DB_DUCKDB_S3_REGION",
-            )
-            _set_optional_env(
-                env,
-                config=config,
-                config_key="s3_url_style",
-                env_key="CUBEJS_DB_DUCKDB_S3_URL_STYLE",
-            )
+        env["CUBEJS_DB_DUCKDB_DATABASE_PATH"] = str(database_path)
+        _set_optional_env(
+            env,
+            config=config,
+            config_key="s3_endpoint",
+            env_key="CUBEJS_DB_DUCKDB_S3_ENDPOINT",
+        )
+        _set_optional_env(
+            env,
+            config=config,
+            config_key="s3_region",
+            env_key="CUBEJS_DB_DUCKDB_S3_REGION",
+        )
+        _set_optional_env(
+            env,
+            config=config,
+            config_key="s3_url_style",
+            env_key="CUBEJS_DB_DUCKDB_S3_URL_STYLE",
+        )
 
         schema_path = binding.config.get("schema_path")
         if schema_path is not None:
@@ -626,6 +624,17 @@ def _service_endpoints_by_name(
     service_endpoints: list[SemanticServiceEndpointBinding],
 ) -> dict[str, SemanticServiceEndpointBinding]:
     """Return service endpoints keyed by name."""
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for endpoint in service_endpoints:
+        if endpoint.name in seen:
+            duplicates.add(endpoint.name)
+        seen.add(endpoint.name)
+    if duplicates:
+        raise CubeRuntimeConfigError(
+            f"duplicate service endpoint names: {sorted(duplicates)}",
+            fragment="service_endpoints",
+        )
     return {endpoint.name: endpoint for endpoint in service_endpoints}
 
 
@@ -635,8 +644,8 @@ def _find_api(apis: list[SemanticApiBinding], family: str) -> SemanticApiBinding
 
 
 def _ensure_single_datasource(datasources: list[Any]) -> None:
-    """Ensure Cube runtime rendering receives at most one datasource."""
-    if len(datasources) > 1:
+    """Ensure Cube runtime rendering receives exactly one datasource."""
+    if len(datasources) != 1:
         raise CubeRuntimeConfigError(
             "Cube runtime rendering supports exactly one datasource binding"
         )
@@ -730,19 +739,18 @@ def _render_secret_environment_refs(
 ) -> dict[str, dict[str, str | None]]:
     """Map Cube secret environment variables to unresolved credential refs."""
     secret_env_refs: dict[str, dict[str, str | None]] = {}
-    if datasources:
-        _ensure_single_datasource(datasources)
-        datasource = datasources[0]
-        datasource_secret_env_names = {
-            "s3_access_key_id": "CUBEJS_DB_DUCKDB_S3_ACCESS_KEY_ID",
-            "s3_secret_access_key": (
-                "CUBEJS_DB_DUCKDB_S3_SECRET_ACCESS_KEY"  # pragma: allowlist secret
-            ),
-        }
-        for credential_name, env_name in datasource_secret_env_names.items():
-            credential_ref = datasource.credential_refs.get(credential_name)
-            if credential_ref is not None:
-                secret_env_refs[env_name] = _credential_ref_to_dict(credential_ref)
+    _ensure_single_datasource(datasources)
+    datasource = datasources[0]
+    datasource_secret_env_names = {
+        "s3_access_key_id": "CUBEJS_DB_DUCKDB_S3_ACCESS_KEY_ID",
+        "s3_secret_access_key": (
+            "CUBEJS_DB_DUCKDB_S3_SECRET_ACCESS_KEY"  # pragma: allowlist secret
+        ),
+    }
+    for credential_name, env_name in datasource_secret_env_names.items():
+        credential_ref = datasource.credential_refs.get(credential_name)
+        if credential_ref is not None:
+            secret_env_refs[env_name] = _credential_ref_to_dict(credential_ref)
 
     sql_wire_api = _find_api(apis, "sql_wire")
     if sql_wire_api is not None:
