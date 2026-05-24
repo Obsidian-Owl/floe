@@ -11,6 +11,7 @@ import pytest
 from floe_semantic_cube.errors import (
     CubeDatasourceError,
     CubeHealthCheckError,
+    CubeRuntimeConfigError,
     CubeSemanticError,
     SchemaGenerationError,
 )
@@ -131,6 +132,38 @@ class TestCubeDatasourceError:
             raise CubeDatasourceError("test")
 
 
+class TestCubeRuntimeConfigError:
+    """Tests for CubeRuntimeConfigError."""
+
+    @pytest.mark.requirement("FR-008")
+    def test_inherits_from_base(self) -> None:
+        """Test that CubeRuntimeConfigError inherits from CubeSemanticError."""
+        assert issubclass(CubeRuntimeConfigError, CubeSemanticError)
+
+    @pytest.mark.requirement("FR-008")
+    def test_message_without_fragment(self) -> None:
+        """Test runtime config error without fragment context."""
+        error = CubeRuntimeConfigError("Unsupported binding")
+        assert str(error) == "Unsupported binding"
+        assert error.fragment is None
+
+    @pytest.mark.requirement("FR-008")
+    def test_message_with_fragment(self) -> None:
+        """Test runtime config error includes fragment context when provided."""
+        error = CubeRuntimeConfigError(
+            "Unsupported binding",
+            fragment="apis.sql_wire",
+        )
+        assert str(error) == "Unsupported binding (fragment: apis.sql_wire)"
+        assert error.fragment == "apis.sql_wire"
+
+    @pytest.mark.requirement("FR-008")
+    def test_catchable_as_base(self) -> None:
+        """Test that CubeRuntimeConfigError is catchable as CubeSemanticError."""
+        with pytest.raises(CubeSemanticError):
+            raise CubeRuntimeConfigError("test")
+
+
 class TestErrorHierarchy:
     """Tests for the complete error hierarchy."""
 
@@ -141,6 +174,7 @@ class TestErrorHierarchy:
             SchemaGenerationError,
             CubeHealthCheckError,
             CubeDatasourceError,
+            CubeRuntimeConfigError,
         ]
         for error_type in error_types:
             assert issubclass(error_type, CubeSemanticError), (
@@ -155,6 +189,7 @@ class TestErrorHierarchy:
             SchemaGenerationError,
             CubeHealthCheckError,
             CubeDatasourceError,
+            CubeRuntimeConfigError,
         ]
         for error_type in error_types:
             assert issubclass(error_type, Exception), (

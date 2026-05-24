@@ -2,5 +2,3 @@
 
 Provides shared fixtures for unit and integration tests.
 """
-
-from __future__ import annotations
